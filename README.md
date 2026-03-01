@@ -24,13 +24,23 @@ Animal management, SOPs, and inventory drop planner for Sundown Reptiles. Employ
 
 4. Open [http://localhost:3000](http://localhost:3000)
 
+## Push to GitHub
+
+The repo is initialized with an initial commit. To push to GitHub:
+
+1. Create a new repository on [GitHub](https://github.com/new) (e.g. `sundown-hq`).
+2. Add the remote and push:
+   ```bash
+   git remote add origin https://github.com/YOUR_USERNAME/sundown-hq.git
+   git push -u origin main
+   ```
+
 ## Deploy to Vercel
 
-1. Push this repo to GitHub.
-2. Go to [vercel.com](https://vercel.com) → New Project → Import your repo.
-3. Framework preset: **Vite** (auto-detected).
-4. Add environment variables in Project Settings if needed.
-5. Deploy. Each push to `main` triggers a new deployment.
+1. Go to [vercel.com](https://vercel.com) → New Project → Import your GitHub repo.
+2. Framework preset: **Vite** (auto-detected).
+3. Add environment variables in Project Settings if needed (e.g. `GEMINI_API_KEY`).
+4. Deploy. Each push to `main` triggers a new deployment.
 
 ## Scripts
 
