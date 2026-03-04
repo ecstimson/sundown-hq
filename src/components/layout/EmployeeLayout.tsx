@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from "react-router-dom";
-import { Home, ClipboardList, Book, ScanLine, List } from "lucide-react";
+import { Home, ClipboardList, Book, ScanLine, List, CalendarDays, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function EmployeeLayout() {
@@ -62,6 +62,19 @@ export default function EmployeeLayout() {
         </NavLink>
 
         <NavLink
+          to="/employee/schedule"
+          className={({ isActive }) =>
+            cn(
+              "flex flex-col items-center justify-center w-full h-full gap-1.5 transition-colors",
+              isActive ? "text-sundown-gold" : "text-sundown-muted hover:text-sundown-text"
+            )
+          }
+        >
+          <CalendarDays className="w-6 h-6" />
+          <span className="text-[10px] font-medium uppercase tracking-wide">Schedule</span>
+        </NavLink>
+
+        <NavLink
           to="/employee/sops"
           className={({ isActive }) =>
             cn(
@@ -72,6 +85,19 @@ export default function EmployeeLayout() {
         >
           <Book className="w-6 h-6" />
           <span className="text-[10px] font-medium uppercase tracking-wide">SOPs</span>
+        </NavLink>
+
+        <NavLink
+          to="/employee/messages"
+          className={({ isActive }) =>
+            cn(
+              "flex flex-col items-center justify-center w-full h-full gap-1.5 transition-colors",
+              isActive ? "text-sundown-gold" : "text-sundown-muted hover:text-sundown-text"
+            )
+          }
+        >
+          <MessageSquare className="w-6 h-6" />
+          <span className="text-[10px] font-medium uppercase tracking-wide">Chat</span>
         </NavLink>
       </nav>
     </div>

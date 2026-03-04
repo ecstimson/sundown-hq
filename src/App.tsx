@@ -1,11 +1,7 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import EmployeeLayout from "@/components/layout/EmployeeLayout";
 import AdminLayout from "@/components/layout/AdminLayout";
 import EmployeeHome from "@/pages/EmployeeHome";
@@ -26,8 +22,11 @@ import DropPlanner from "@/pages/admin/DropPlanner";
 import ChecklistReview from "@/pages/admin/ChecklistReview";
 import SOPManager from "@/pages/admin/SOPManager";
 import Integrations from "@/pages/admin/Integrations";
+import AdminSchedule from "@/pages/admin/Schedule";
+import EmployeeSchedule from "@/pages/EmployeeSchedule";
+import GroupChat from "@/pages/GroupChat";
+import SystemSettings from "@/pages/admin/SystemSettings";
 
-// Placeholder components for demo
 const Placeholder = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-full p-8 text-center space-y-4">
     <div className="w-16 h-16 rounded-full bg-sundown-card border border-sundown-border flex items-center justify-center text-sundown-muted text-2xl">
@@ -44,9 +43,13 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
-        
-        {/* Employee Routes */}
-        <Route path="/employee" element={<EmployeeLayout />}>
+
+        {/* Employee Routes — any authenticated user */}
+        <Route path="/employee" element={
+          <ProtectedRoute>
+            <EmployeeLayout />
+          </ProtectedRoute>
+        }>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<EmployeeHome />} />
           <Route path="tasks" element={<EmployeeDashboard />} />
@@ -56,23 +59,31 @@ export default function App() {
           <Route path="animals/:id" element={<AnimalDetail />} />
           <Route path="observe" element={<LogObservation />} />
           <Route path="checklists" element={<Checklists />} />
+          <Route path="schedule" element={<EmployeeSchedule />} />
+          <Route path="messages" element={<GroupChat />} />
           <Route path="sops" element={<SOPs />} />
           <Route path="settings" element={<Placeholder title="Settings" />} />
         </Route>
 
-        {/* Admin Routes */}
-        <Route path="/admin" element={<AdminLayout />}>
+        {/* Admin Routes — admin or super_admin only */}
+        <Route path="/admin" element={
+          <ProtectedRoute requireRole="admin">
+            <AdminLayout />
+          </ProtectedRoute>
+        }>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="animals" element={<AdminAnimals />} />
           <Route path="drops" element={<DropPlanner />} />
           <Route path="checklists" element={<ChecklistReview />} />
+          <Route path="schedule" element={<AdminSchedule />} />
+          <Route path="messages" element={<GroupChat />} />
           <Route path="sops" element={<SOPManager />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="staff" element={<Staff />} />
           <Route path="integrations" element={<Integrations />} />
           <Route path="health" element={<Health />} />
-          <Route path="settings" element={<Placeholder title="System Settings" />} />
+          <Route path="settings" element={<SystemSettings />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -1,13 +1,14 @@
 import { Button } from "@/components/ui/Button";
 import { Link } from "react-router-dom";
 import { Smartphone, Monitor } from "lucide-react";
+import { BrandLogo } from "@/components/ui/BrandLogo";
 
 export default function Landing() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-sundown-bg text-sundown-text p-6 space-y-12">
       <div className="text-center space-y-4">
-        <div className="w-20 h-20 bg-sundown-gold rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-sundown-gold/20">
-          <span className="text-4xl font-bold text-black">S</span>
+        <div className="mx-auto mb-6 flex justify-center">
+          <BrandLogo variant="stacked" className="h-24 w-auto drop-shadow-[0_0_12px_rgba(209,135,4,0.35)]" />
         </div>
         <h1 className="text-4xl font-bold tracking-tight">Sundown HQ</h1>
         <p className="text-sundown-muted max-w-md mx-auto">
@@ -33,7 +34,7 @@ export default function Landing() {
           </div>
         </Link>
 
-        <Link to="/login" className="group">
+        <Link to="/login?mode=admin" className="group">
           <div className="h-full p-8 rounded-2xl border border-sundown-border bg-sundown-card hover:border-sundown-gold transition-colors flex flex-col items-center text-center space-y-4 group-hover:bg-sundown-card/80">
             <div className="w-16 h-16 rounded-full bg-sundown-bg flex items-center justify-center group-hover:scale-110 transition-transform">
               <Monitor className="w-8 h-8 text-sundown-gold" />

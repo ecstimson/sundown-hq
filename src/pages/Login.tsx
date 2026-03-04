@@ -1,106 +1,262 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
-import { ChevronDown, Delete } from "lucide-react";
+import { ChevronDown, Delete, ArrowLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
+import { supabase, supabaseConfigValid } from "@/lib/supabase";
+import { pinToAuthPassword } from "@/lib/pinAuth";
+import { BrandLogo } from "@/components/ui/BrandLogo";
 
-const EMPLOYEES = [
-  { id: 1, name: "John Doe" },
-  { id: 2, name: "Jane Smith" },
-  { id: 3, name: "Mike Johnson" },
-  { id: 99, name: "Admin User" }, // For demo purposes
-];
+interface EmployeeOption {
+  name: string;
+}
+
+const MIN_PIN_LENGTH = 4;
+const MAX_PIN_LENGTH = 6;
 
 export default function Login() {
   const navigate = useNavigate();
-  const [selectedEmployee, setSelectedEmployee] = useState<number | null>(null);
+  const [searchParams] = useSearchParams();
+  const isAdminMode = searchParams.get("mode") === "admin";
+  const { user, employee, signIn, signInWithPin } = useAuth();
+
+  // Employee PIN state
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
+  // Admin email/password state
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // Shared state
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user && employee) {
+      // Admins can intentionally use employee mode for shift/training flows.
+      const isPrivilegedRole = ["admin", "super_admin"].includes(employee.role);
+      if (isAdminMode && isPrivilegedRole) {
+        navigate("/admin/dashboard", { replace: true });
+      } else {
+        navigate("/employee/dashboard", { replace: true });
+      }
+    }
+  }, [user, employee, isAdminMode, navigate]);
+
+  // Fetch active employee names via secure RPC (no direct table access needed)
+  useEffect(() => {
+    if (!isAdminMode) {
+      if (!supabaseConfigValid) {
+        setError("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.");
+        return;
+      }
+      supabase
+        .rpc("get_active_employee_names")
+        .then(({ data, error }) => {
+          if (error) {
+            console.error("Failed to load employee names:", error.message);
+            setError("Unable to load employee list. Check Supabase functions/migrations and API keys.");
+            return;
+          }
+          if (data) setEmployees(data as EmployeeOption[]);
+        });
+    }
+  }, [isAdminMode]);
+
   const handleNumberClick = (num: number) => {
-    if (pin.length < 4) {
-      setPin((prev) => prev + num);
+    if (pin.length < MAX_PIN_LENGTH) {
+      const newPin = pin + num;
+      setPin(newPin);
+      setError("");
     }
   };
 
   const handleDelete = () => {
     setPin((prev) => prev.slice(0, -1));
+    setError("");
   };
 
-  const handleLogin = () => {
-    if (selectedEmployee && pin.length === 4) {
-      // Simple mock authentication
-      if (selectedEmployee === 99) {
-        navigate("/admin/dashboard");
-      } else {
-        navigate("/employee/dashboard");
-      }
+  async function handlePinLogin(name: string, pinCode: string) {
+    setIsLoading(true);
+    setError("");
+    try {
+      await signInWithPin(name, pinCode);
+      navigate("/employee/dashboard", { replace: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid PIN. Try again.";
+      setError(message);
+      setPin("");
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }
 
+  async function handlePinSubmit() {
+    if (!selectedEmployee) {
+      setError("Select an employee first.");
+      return;
+    }
+    if (pin.length < MIN_PIN_LENGTH) {
+      setError(`PIN must be at least ${MIN_PIN_LENGTH} digits.`);
+      return;
+    }
+    await handlePinLogin(selectedEmployee, pin);
+  }
+
+  async function handleAdminLogin(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
+    try {
+      try {
+        await signIn(email, password);
+      } catch {
+        // Convenience fallback for environments where PIN-derived auth passwords are used.
+        await signIn(email, pinToAuthPassword(password));
+      }
+      navigate("/admin/dashboard", { replace: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid email or password.";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // Admin email/password login
+  if (isAdminMode) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-sundown-bg p-6 max-w-md mx-auto w-full">
+        <div className="flex flex-col items-center space-y-6 mb-12 w-full">
+          <BrandLogo variant="icon" className="h-24 w-auto drop-shadow-[0_0_15px_rgba(212,168,83,0.4)]" />
+          <h1 className="text-2xl font-bold tracking-tight text-sundown-text">Admin Login</h1>
+        </div>
+
+        <form onSubmit={handleAdminLogin} className="w-full space-y-6">
+          <div className="space-y-4">
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setError(""); }}
+              className="w-full h-14 bg-sundown-card border border-sundown-border rounded-xl px-4 text-lg text-sundown-text placeholder:text-sundown-muted focus:outline-none focus:border-sundown-gold transition-colors"
+              autoComplete="email"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              className="w-full h-14 bg-sundown-card border border-sundown-border rounded-xl px-4 text-lg text-sundown-text placeholder:text-sundown-muted focus:outline-none focus:border-sundown-gold transition-colors"
+              autoComplete="current-password"
+            />
+          </div>
+
+          {error && (
+            <div className="bg-sundown-card border border-sundown-red rounded-lg p-3">
+              <p className="text-sundown-red text-sm text-center font-bold">{error}</p>
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            disabled={!email || !password || isLoading}
+            className="w-full h-14 text-lg font-bold rounded-xl shadow-[0_4px_14px_rgba(212,168,83,0.2)] bg-sundown-gold text-black hover:bg-sundown-gold-hover"
+          >
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Sign In"}
+          </Button>
+        </form>
+
+        <button
+          onClick={() => navigate("/login")}
+          className="mt-8 flex items-center gap-2 text-sundown-muted hover:text-sundown-text transition-colors text-sm font-medium"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Employee Login
+        </button>
+      </div>
+    );
+  }
+
+  // Employee PIN login
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-sundown-bg p-6 max-w-md mx-auto w-full">
       {/* Logo Area */}
-      <div className="flex flex-col items-center space-y-4 mb-12">
-        <div className="w-24 h-24 bg-sundown-gold rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(212,168,83,0.2)]">
-          <span className="text-5xl font-bold text-black">S</span>
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-sundown-text">Sundown HQ</h1>
+      <div className="flex flex-col items-center space-y-6 mb-12 w-full">
+        <BrandLogo variant="stacked" className="h-32 w-auto drop-shadow-[0_0_15px_rgba(212,168,83,0.4)]" />
       </div>
 
       {/* Employee Selector */}
-      <div className="w-full mb-8 relative">
+      <div className="w-full mb-8 relative z-10">
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          className="w-full h-14 bg-sundown-card border border-sundown-border rounded-xl px-4 flex items-center justify-between text-lg text-sundown-text focus:outline-none focus:border-sundown-gold transition-colors"
+          className="w-full h-14 bg-sundown-card border border-sundown-border rounded-xl px-4 flex items-center justify-between text-lg text-sundown-text focus:outline-none focus:border-sundown-gold transition-colors hover:border-sundown-gold"
         >
-          <span className={!selectedEmployee ? "text-sundown-muted" : ""}>
-            {selectedEmployee
-              ? EMPLOYEES.find((e) => e.id === selectedEmployee)?.name
-              : "Select Employee"}
+          <span className={!selectedEmployee ? "text-sundown-muted" : "text-sundown-text font-bold"}>
+            {selectedEmployee || "Select Employee"}
           </span>
           <ChevronDown className={cn("w-5 h-5 text-sundown-muted transition-transform", isDropdownOpen && "rotate-180")} />
         </button>
 
         {isDropdownOpen && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-sundown-card border border-sundown-border rounded-xl shadow-xl z-50 overflow-hidden">
-            {EMPLOYEES.map((employee) => (
-              <button
-                key={employee.id}
-                onClick={() => {
-                  setSelectedEmployee(employee.id);
-                  setIsDropdownOpen(false);
-                  setPin("");
-                }}
-                className="w-full text-left px-4 py-3 hover:bg-sundown-border text-sundown-text transition-colors border-b border-sundown-border last:border-0"
-              >
-                {employee.name}
-              </button>
-            ))}
+          <div className="absolute top-full left-0 right-0 mt-2 bg-sundown-card border border-sundown-border rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto ring-1 ring-black/5">
+            {employees.length === 0 ? (
+              <div className="px-4 py-3 text-sundown-muted text-center">No employees found</div>
+            ) : (
+              employees.map((emp) => (
+                <button
+                  key={emp.name}
+                  onClick={() => {
+                    setSelectedEmployee(emp.name);
+                    setIsDropdownOpen(false);
+                    setPin("");
+                    setError("");
+                  }}
+                  className="w-full text-left px-4 py-3 hover:bg-sundown-border text-sundown-text transition-colors border-b border-sundown-border last:border-0 font-medium"
+                >
+                  {emp.name}
+                </button>
+              ))
+            )}
           </div>
         )}
       </div>
 
       {/* PIN Display */}
-      <div className="flex gap-4 mb-8 justify-center h-8">
-        {[0, 1, 2, 3].map((i) => (
+      <div className="flex gap-4 mb-8 justify-center h-4">
+        {Array.from({ length: MAX_PIN_LENGTH }).map((_, i) => (
           <div
             key={i}
             className={cn(
-              "w-4 h-4 rounded-full border border-sundown-muted transition-all duration-200",
-              pin.length > i ? "bg-sundown-gold border-sundown-gold scale-110" : "bg-transparent"
+              "w-3 h-3 rounded-full transition-all duration-200",
+              pin.length > i 
+                ? "bg-sundown-gold scale-110 shadow-[0_0_8px_rgba(212,168,83,0.5)]" 
+                : "bg-sundown-border"
             )}
           />
         ))}
       </div>
 
+      {/* Error message */}
+      <div className="h-6 mb-4 w-full flex justify-center">
+        {error && (
+          <p className="text-sundown-red text-sm font-bold animate-in fade-in slide-in-from-top-1">{error}</p>
+        )}
+      </div>
+
       {/* Number Pad */}
-      <div className="grid grid-cols-3 gap-4 w-full mb-8">
+      <div className="grid grid-cols-3 gap-4 w-full mb-8 max-w-[280px]">
         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
           <button
             key={num}
             onClick={() => handleNumberClick(num)}
-            className="h-16 rounded-full bg-sundown-card/50 text-2xl font-medium text-sundown-text hover:bg-sundown-card active:bg-sundown-gold active:text-black transition-all touch-manipulation"
+            disabled={isLoading}
+            className="h-16 w-16 rounded-full bg-sundown-card text-2xl font-bold text-sundown-text hover:bg-sundown-border active:bg-sundown-gold active:text-black transition-all touch-manipulation disabled:opacity-50 mx-auto flex items-center justify-center border border-transparent hover:border-sundown-gold"
           >
             {num}
           </button>
@@ -108,26 +264,42 @@ export default function Login() {
         <div /> {/* Empty slot */}
         <button
           onClick={() => handleNumberClick(0)}
-          className="h-16 rounded-full bg-sundown-card/50 text-2xl font-medium text-sundown-text hover:bg-sundown-card active:bg-sundown-gold active:text-black transition-all touch-manipulation"
+          disabled={isLoading}
+          className="h-16 w-16 rounded-full bg-sundown-card text-2xl font-bold text-sundown-text hover:bg-sundown-border active:bg-sundown-gold active:text-black transition-all touch-manipulation disabled:opacity-50 mx-auto flex items-center justify-center border border-transparent hover:border-sundown-gold"
         >
           0
         </button>
         <button
           onClick={handleDelete}
-          className="h-16 rounded-full bg-transparent flex items-center justify-center text-sundown-muted hover:text-sundown-text active:text-sundown-red transition-colors"
+          disabled={isLoading}
+          className="h-16 w-16 rounded-full bg-transparent flex items-center justify-center text-sundown-muted hover:text-sundown-text active:text-sundown-red transition-colors mx-auto"
         >
           <Delete className="w-8 h-8" />
         </button>
       </div>
 
-      {/* Clock In Button */}
       <Button
-        onClick={handleLogin}
-        disabled={!selectedEmployee || pin.length !== 4}
-        className="w-full h-14 text-lg font-bold rounded-xl shadow-[0_4px_14px_rgba(212,168,83,0.2)]"
+        onClick={handlePinSubmit}
+        disabled={isLoading || !selectedEmployee || pin.length < MIN_PIN_LENGTH}
+        className="w-full h-12 max-w-[280px] mb-6"
       >
-        Clock In
+        Sign In
       </Button>
+
+      {/* Loading indicator */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm">
+          <Loader2 className="w-10 h-10 text-sundown-gold animate-spin" />
+        </div>
+      )}
+
+      {/* Admin login link */}
+      <button
+        onClick={() => navigate("/login?mode=admin")}
+        className="text-sundown-muted hover:text-sundown-text transition-colors text-sm font-medium"
+      >
+        Admin Login
+      </button>
     </div>
   );
 }

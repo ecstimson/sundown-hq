@@ -1,59 +1,82 @@
 # Sundown HQ
 
-Animal management, SOPs, and inventory drop planner for Sundown Reptiles. Employee PWA (mobile-first) and Admin Dashboard (desktop).
+Animal operations platform for Sundown Reptiles:
+- Employee app (mobile-first workflows)
+- Admin dashboard (inventory, staff, checklists, SOPs, drop planning)
+- Supabase backend (Auth + Postgres + RLS)
 
-## Run Locally
+## Requirements
 
-**Prerequisites:** Node.js 18+
+- Node.js 18+ (Node 20 recommended)
+- npm 9+
+- Supabase project with SQL migrations applied
+
+## Local Setup
 
 1. Install dependencies:
    ```bash
    npm install
    ```
 
-2. (Optional) Create `.env.local` for API keys. Copy from `.env.example`:
+2. Create local env file:
    ```bash
    cp .env.example .env.local
    ```
-   `GEMINI_API_KEY` is optional for now — the app runs without it.
 
-3. Start the dev server:
+3. Set required values in `.env.local`:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` (scripts only)
+
+4. Run SQL migrations in Supabase SQL Editor:
+   - `supabase/migrations/001_secure_employee_auth.sql`
+   - `supabase/migrations/002_schema_policy_alignment.sql`
+
+5. Start app:
    ```bash
    npm run dev
    ```
+   Open [http://localhost:3000](http://localhost:3000)
 
-4. Open [http://localhost:3000](http://localhost:3000)
+## Admin Bootstrap (Required Once)
 
-## Push to GitHub
+After creating your admin user in Supabase Auth, create matching `employees` row using the same UUID:
 
-The repo is initialized with an initial commit. To push to GitHub:
-
-1. Create a new repository on [GitHub](https://github.com/new) (e.g. `sundown-hq`).
-2. Add the remote and push:
-   ```bash
-   git remote add origin https://github.com/YOUR_USERNAME/sundown-hq.git
-   git push -u origin main
-   ```
-
-## Deploy to Vercel
-
-1. Go to [vercel.com](https://vercel.com) → New Project → Import your GitHub repo.
-2. Framework preset: **Vite** (auto-detected).
-3. Add environment variables in Project Settings if needed (e.g. `GEMINI_API_KEY`).
-4. Deploy. Each push to `main` triggers a new deployment.
+```sql
+INSERT INTO employees (id, name, pin, role, is_active, assigned_buildings)
+SELECT id, 'Admin User', '0000', 'super_admin', true, ARRAY['A','B']
+FROM auth.users
+WHERE email = 'your-admin@email.com'
+ON CONFLICT (id) DO UPDATE SET role = 'super_admin', is_active = true;
+```
 
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start dev server (port 3000) |
+| `npm run dev` | Start dev server on port 3000 |
 | `npm run build` | Production build |
 | `npm run preview` | Preview production build |
-| `npm run lint` | Type check |
+| `npm run lint` | Type check (`tsc --noEmit`) |
+| `npm test` | Run Vitest suite |
+| `npm run test:watch` | Run tests in watch mode |
 
-## Project Structure
+## CI
 
-- `src/pages/` — Page components (Employee + Admin flows)
-- `src/components/` — Layout and UI components
-- `src/lib/` — Utilities
-- See [sundown-hq-app-prd.md](sundown-hq-app-prd.md) for full product spec
+GitHub Actions workflow at `.github/workflows/ci.yml` runs:
+- typecheck
+- tests
+- production build
+
+on every push/PR to `main`.
+
+## Launch Readiness
+
+See `docs/launch-checklist.md` for the v1 launch checklist.
+
+## Deployment
+
+Deploy on Vercel (Vite preset) or any static host:
+- build command: `npm run build`
+- output dir: `dist`
+- required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
