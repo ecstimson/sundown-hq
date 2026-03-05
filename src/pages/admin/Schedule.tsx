@@ -247,7 +247,7 @@ export default function AdminSchedule() {
           setEditingEvent(null);
           setShowEventModal(true);
         }}
-        className="fixed bottom-8 right-8 h-14 w-14 rounded-full bg-sundown-gold text-black shadow-lg shadow-sundown-gold/30 hover:bg-sundown-gold-hover transition-colors flex items-center justify-center z-30"
+        className="fixed bottom-28 right-5 lg:bottom-8 lg:right-8 h-14 w-14 rounded-full bg-sundown-gold text-black shadow-lg shadow-sundown-gold/30 hover:bg-sundown-gold-hover transition-colors flex items-center justify-center z-30"
         aria-label="Add event"
       >
         <CirclePlus className="w-6 h-6" />

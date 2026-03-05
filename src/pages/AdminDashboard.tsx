@@ -165,7 +165,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 border border-sundown-border divide-x divide-sundown-border bg-sundown-card">
+      <div className="grid grid-cols-2 lg:grid-cols-4 border border-sundown-border divide-x divide-y lg:divide-y-0 divide-sundown-border bg-sundown-card">
         <StatCell icon={Box} label="Total Animals" value={String(totalAnimals)} />
         <StatCell icon={Calendar} label="Next Drop" value={nextDropLabel} sub={nextDrop?.drop_id} />
         <StatCell icon={CalendarDays} label="Today's Events" value={String(todayEvents)} />

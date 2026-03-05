@@ -91,7 +91,7 @@ export default function Inventory() {
       </div>
 
       {/* Status Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {byStatus.map((s) => (
           <Card key={s.status}>
             <CardContent className="p-4 text-center">

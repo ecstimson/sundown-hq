@@ -271,20 +271,20 @@ export default function SOPManager() {
         </div>
       )}
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-sundown-text">SOP Library</h1>
           <p className="text-sundown-muted text-sm">
             Manage standard operating procedures
           </p>
         </div>
-        <Button className="gap-2" onClick={() => setShowCreateModal(true)}>
+        <Button className="gap-2 w-full sm:w-auto" onClick={() => setShowCreateModal(true)}>
           <Plus className="w-4 h-4" /> Create New SOP
         </Button>
       </div>
 
       {/* Search & Filters */}
-      <div className="flex gap-4">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-sundown-muted" />
           <input
@@ -329,7 +329,7 @@ export default function SOPManager() {
                   <div className="w-10 h-10 rounded-lg bg-sundown-bg border border-sundown-border flex items-center justify-center text-sundown-muted group-hover:text-sundown-gold transition-colors">
                     <FileText className="w-5 h-5" />
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                     <Button
                       variant="ghost"
                       size="icon"

@@ -282,14 +282,14 @@ export default function DropPlanner() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className="flex flex-col min-h-0 lg:h-[calc(100vh-8rem)]">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-sundown-text">Drop Planner</h1>
-          <p className="text-sundown-muted text-sm">Plan upcoming drops — select animals on the left, manage drops on the right</p>
+          <p className="text-sundown-muted text-sm hidden sm:block">Plan upcoming drops — select animals on the left, manage drops on the right</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {activeDrop && dropAnimals.length > 0 && (
             <>
               <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={exportShopifyCSV}>
@@ -355,9 +355,9 @@ export default function DropPlanner() {
       )}
 
       {/* Two Column Layout */}
-      <div className="flex-1 flex gap-4 overflow-hidden min-h-0">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden min-h-0">
         {/* Left: Available Animals */}
-        <div className="flex-1 flex flex-col border border-sundown-border bg-sundown-card overflow-hidden">
+        <div className="flex-1 flex flex-col border border-sundown-border bg-sundown-card overflow-hidden min-h-[300px] lg:min-h-0">
           <div className="p-3 border-b border-sundown-border space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-sundown-text">
@@ -440,7 +440,7 @@ export default function DropPlanner() {
                     {activeDrop && (
                       <button
                         onClick={() => addToDrop(a.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-sundown-gold/10 text-sundown-muted hover:text-sundown-gold transition-all shrink-0"
+                        className="lg:opacity-0 lg:group-hover:opacity-100 p-1.5 rounded hover:bg-sundown-gold/10 text-sundown-muted hover:text-sundown-gold transition-all shrink-0"
                         title={`Add to ${activeDrop.drop_id}`}
                       >
                         <ArrowRight className="w-4 h-4" />
@@ -454,7 +454,7 @@ export default function DropPlanner() {
         </div>
 
         {/* Right: Drop Contents */}
-        <div className="w-[400px] flex flex-col border border-sundown-border bg-sundown-card overflow-hidden shrink-0">
+        <div className="w-full lg:w-[400px] flex flex-col border border-sundown-border bg-sundown-card overflow-hidden shrink-0 min-h-[250px] lg:min-h-0">
           {!activeDrop ? (
             <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
               <Package className="w-10 h-10 text-sundown-muted mb-3" />
@@ -510,7 +510,7 @@ export default function DropPlanner() {
                         </span>
                         <button
                           onClick={() => removeFromDrop(da.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-sundown-red/10 text-sundown-muted hover:text-sundown-red transition-all shrink-0"
+                          className="lg:opacity-0 lg:group-hover:opacity-100 p-1.5 rounded hover:bg-sundown-red/10 text-sundown-muted hover:text-sundown-red transition-all shrink-0"
                           title="Remove"
                         >
                           <X className="w-3.5 h-3.5" />

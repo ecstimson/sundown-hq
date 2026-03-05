@@ -454,7 +454,7 @@ export default function AdminAnimals() {
       {/* Top Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-sundown-text">Animals</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             className="gap-2"
@@ -466,13 +466,14 @@ export default function AdminAnimals() {
             ) : (
               <Upload className="w-4 h-4" />
             )}
-            {importing ? "Importing..." : "Import CSV"}
+            <span className="hidden sm:inline">{importing ? "Importing..." : "Import CSV"}</span>
+            <span className="sm:hidden">{importing ? "..." : "Import"}</span>
           </Button>
           <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
-            <Download className="w-4 h-4" /> Export CSV
+            <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export CSV</span><span className="sm:hidden">Export</span>
           </Button>
           <Button className="gap-2" onClick={() => setShowAddModal(true)}>
-            <Plus className="w-4 h-4" /> Add Animal
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Animal</span><span className="sm:hidden">Add</span>
           </Button>
         </div>
       </div>
@@ -532,7 +533,7 @@ export default function AdminAnimals() {
             className="w-full h-10 pl-10 pr-4 rounded-md border border-sundown-border bg-sundown-card text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold placeholder:text-sundown-muted"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <div className="relative">
             <Button
               variant="outline"
@@ -572,7 +573,7 @@ export default function AdminAnimals() {
           <select
             value={speciesFilter}
             onChange={(e) => setSpeciesFilter(e.target.value)}
-            className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-card text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold"
+            className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-card text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold flex-1 min-w-[120px] sm:flex-none"
           >
             <option>All Species</option>
             {speciesList.map((s) => (
@@ -582,7 +583,7 @@ export default function AdminAnimals() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-card text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold"
+            className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-card text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold flex-1 min-w-[120px] sm:flex-none"
           >
             <option>All Status</option>
             <option>Available</option>
@@ -597,7 +598,7 @@ export default function AdminAnimals() {
 
       {/* Bulk Actions */}
       {selected.length > 0 && (
-        <div className="bg-sundown-card border border-sundown-gold rounded-md p-3 flex items-center justify-between">
+        <div className="bg-sundown-card border border-sundown-gold rounded-md p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <span className="text-sm font-bold text-sundown-gold">
             {selected.length} selected
           </span>
@@ -918,7 +919,7 @@ export default function AdminAnimals() {
                   className="w-full h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold placeholder:text-sundown-muted"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-sundown-muted mb-1">Weight (g)</label>
                   <input
@@ -939,7 +940,7 @@ export default function AdminAnimals() {
                     className="w-full h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold placeholder:text-sundown-muted"
                   />
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <label className="block text-xs font-bold text-sundown-muted mb-1">Hatch Date</label>
                   <input
                     type="date"
@@ -1043,7 +1044,7 @@ export default function AdminAnimals() {
                   className="w-full h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-sundown-muted mb-1">Weight (g)</label>
                   <input
@@ -1062,7 +1063,7 @@ export default function AdminAnimals() {
                     className="w-full h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold"
                   />
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <label className="block text-xs font-bold text-sundown-muted mb-1">Hatch Date</label>
                   <input
                     type="date"

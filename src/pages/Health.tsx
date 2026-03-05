@@ -48,7 +48,7 @@ export default function Health() {
           description="No health concern observations have been logged yet. That's great news!"
         />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Active Cases List */}
           <Card className="lg:col-span-2">
             <CardHeader>

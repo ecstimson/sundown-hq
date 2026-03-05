@@ -192,13 +192,24 @@ export default function Staff() {
       return;
     }
 
+    const derivedPassword = pinToAuthPassword(nextPin);
     if (user?.id === editing.id) {
       const { error: authUpdateErr } = await supabase.auth.updateUser({
-        password: pinToAuthPassword(nextPin),
+        password: derivedPassword,
       });
       if (authUpdateErr) {
         setFetchError(
-          `Profile saved, but auth password sync failed: ${authUpdateErr.message}. Use Admin Login password until this is fixed.`
+          `Profile saved, but auth password sync failed: ${authUpdateErr.message}.`
+        );
+      }
+    } else {
+      const { error: rpcErr } = await (supabase.rpc as any)(
+        "admin_reset_employee_password",
+        { p_employee_id: editing.id, p_new_password: derivedPassword }
+      );
+      if (rpcErr) {
+        setFetchError(
+          `Profile saved, but auth password sync failed: ${rpcErr.message}. The employee may need a password reset.`
         );
       }
     }
@@ -251,9 +262,9 @@ export default function Staff() {
           {fetchError}
         </div>
       )}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h2 className="text-2xl font-bold text-sundown-text">Staff Management</h2>
-        <Button className="gap-2" onClick={() => setShowAddModal(true)}>
+        <Button className="gap-2 w-full sm:w-auto" onClick={() => setShowAddModal(true)}>
           <UserPlus className="h-4 w-4" />
           Add Employee
         </Button>
@@ -345,15 +356,15 @@ export default function Staff() {
             <CardContent className="p-0">
               <div className="divide-y divide-sundown-border">
                 {timeEntries.map((entry) => (
-                  <div key={entry.id} className="grid grid-cols-4 gap-3 px-4 py-3 text-sm">
+                  <div key={entry.id} className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 px-4 py-3 text-sm">
                     <div className="font-semibold text-sundown-text">
                       {nameById.get(entry.employee_id) || "Unknown"}
                     </div>
-                    <div className="text-sundown-muted">{formatClockTime(entry.clock_in_at)}</div>
-                    <div className="text-sundown-muted">{formatClockTime(entry.clock_out_at)}</div>
-                    <div className={entry.clock_out_at ? "text-sundown-text" : "text-sundown-gold font-semibold"}>
+                    <div className={`text-right sm:text-left ${entry.clock_out_at ? "text-sundown-text" : "text-sundown-gold font-semibold"}`}>
                       {formatDuration(entry)}
                     </div>
+                    <div className="text-sundown-muted text-xs sm:text-sm">{formatClockTime(entry.clock_in_at)}</div>
+                    <div className="text-sundown-muted text-xs sm:text-sm text-right sm:text-left">{formatClockTime(entry.clock_out_at)}</div>
                   </div>
                 ))}
               </div>

@@ -68,7 +68,7 @@ export default function GroupChat() {
   }
 
   return (
-    <div className="h-[calc(100vh-10rem)]">
+    <div className="h-[calc(100vh-12rem)] lg:h-[calc(100vh-10rem)]">
       <Card className="h-full flex flex-col rounded-none">
         <CardHeader className="border-b border-sundown-border">
           <CardTitle>Group Chat</CardTitle>
