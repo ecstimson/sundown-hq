@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, List, Calendar, ClipboardList, Book, Users, Plug, Settings, LogOut, MessageSquare, CalendarDays } from "lucide-react";
+import { LayoutDashboard, List, Calendar, Book, Users, Plug, Settings, LogOut, MessageSquare, CalendarDays, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { BrandLogo } from "@/components/ui/BrandLogo";
@@ -16,9 +16,10 @@ export default function AdminLayout() {
 
   const displayName = employee?.name || "Admin";
   const routeTitle = (() => {
+    if (location.pathname.includes("/admin/quick-add")) return "Quick Add";
+    if (location.pathname.match(/\/admin\/animals\/.+/)) return "Animal Detail";
     if (location.pathname.includes("/admin/animals")) return "Animals";
     if (location.pathname.includes("/admin/drops")) return "Drop Planner";
-    if (location.pathname.includes("/admin/checklists")) return "Checklists";
     if (location.pathname.includes("/admin/sops")) return "SOP Manager";
     if (location.pathname.includes("/admin/staff")) return "Staff Management";
     if (location.pathname.includes("/admin/schedule")) return "Operations Schedule";
@@ -37,10 +38,10 @@ export default function AdminLayout() {
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           <NavItem to="/admin/dashboard" icon={LayoutDashboard} label="Dashboard" />
+          <NavItem to="/admin/quick-add" icon={Plus} label="Quick Add" />
           <NavItem to="/admin/animals" icon={List} label="Animals" />
           <NavItem to="/admin/schedule" icon={CalendarDays} label="Schedule" />
           <NavItem to="/admin/drops" icon={Calendar} label="Drop Planner" />
-          <NavItem to="/admin/checklists" icon={ClipboardList} label="Checklists" />
           <NavItem to="/admin/sops" icon={Book} label="SOPs" />
           <NavItem to="/admin/staff" icon={Users} label="Employees" />
           <NavItem to="/admin/messages" icon={MessageSquare} label="Messages" />

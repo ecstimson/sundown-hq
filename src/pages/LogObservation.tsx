@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
-import { ArrowLeft, Camera, Image as ImageIcon, Loader2 } from "lucide-react";
+import { ArrowLeft, Camera, Image as ImageIcon, Loader2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+
+const MAX_PHOTOS = 5;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 const OBSERVATION_TYPES = [
   "Feeding",
@@ -43,8 +46,52 @@ export default function LogObservation() {
   const [selectedType, setSelectedType] = useState<string>("General Note");
   const [details, setDetails] = useState("");
   const [urgency, setUrgency] = useState<"Routine" | "Needs Attention" | "Urgent">("Routine");
+  const [photos, setPhotos] = useState<{ file: File; preview: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+
+  function addPhotos(files: FileList | null) {
+    if (!files) return;
+    const remaining = MAX_PHOTOS - photos.length;
+    const newPhotos: { file: File; preview: string }[] = [];
+    for (let i = 0; i < Math.min(files.length, remaining); i++) {
+      const file = files[i];
+      if (file.size > MAX_FILE_SIZE) {
+        setError(`"${file.name}" exceeds 5 MB limit.`);
+        continue;
+      }
+      if (!file.type.startsWith("image/")) continue;
+      newPhotos.push({ file, preview: URL.createObjectURL(file) });
+    }
+    setPhotos((prev) => [...prev, ...newPhotos]);
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((prev) => {
+      URL.revokeObjectURL(prev[index].preview);
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
+  async function uploadPhotos(animalIdText: string): Promise<string[]> {
+    const urls: string[] = [];
+    for (const { file } of photos) {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${animalIdText}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("observation-photos")
+        .upload(path, file, { cacheControl: "3600", upsert: false });
+      if (uploadErr) throw uploadErr;
+      const { data } = supabase.storage
+        .from("observation-photos")
+        .getPublicUrl(path);
+      urls.push(data.publicUrl);
+    }
+    return urls;
+  }
 
   const handleSubmit = async () => {
     if (!animalId.trim()) {
@@ -74,8 +121,21 @@ export default function LogObservation() {
       return;
     }
 
-    // Map observation type for DB (Egg/Breeding -> Egg-Breeding)
     const obsType = selectedType === "Egg/Breeding" ? "Egg-Breeding" : selectedType;
+
+    let photoUrls: string[] = [];
+    if (photos.length > 0) {
+      setUploading(true);
+      try {
+        photoUrls = await uploadPhotos(animalId.trim());
+      } catch (err: any) {
+        setError(`Photo upload failed: ${err.message}`);
+        setUploading(false);
+        setSubmitting(false);
+        return;
+      }
+      setUploading(false);
+    }
 
     const { error: insertErr } = await supabase.from("observations").insert({
       animal_id: animal.id,
@@ -84,6 +144,7 @@ export default function LogObservation() {
       observation_type: obsType,
       details: details.trim(),
       urgency,
+      photo_urls: photoUrls.length > 0 ? photoUrls : null,
     } as any);
 
     if (insertErr) {
@@ -180,17 +241,54 @@ export default function LogObservation() {
         {/* Photos */}
         <section>
           <h3 className="text-sm font-semibold text-sundown-muted uppercase tracking-wider mb-3">
-            Photos
+            Photos ({photos.length}/{MAX_PHOTOS})
           </h3>
-          <div className="flex gap-3">
-            <button className="w-20 h-20 rounded-xl bg-sundown-card border border-sundown-border flex flex-col items-center justify-center text-sundown-muted hover:text-sundown-text hover:border-sundown-gold/50 transition-colors">
-              <Camera className="w-6 h-6 mb-1" />
-              <span className="text-[10px]">Camera</span>
-            </button>
-            <button className="w-20 h-20 rounded-xl bg-sundown-card border border-sundown-border flex flex-col items-center justify-center text-sundown-muted hover:text-sundown-text hover:border-sundown-gold/50 transition-colors">
-              <ImageIcon className="w-6 h-6 mb-1" />
-              <span className="text-[10px]">Gallery</span>
-            </button>
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }}
+          />
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }}
+          />
+          <div className="flex flex-wrap gap-3">
+            {photos.map((p, i) => (
+              <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-sundown-border">
+                <img src={p.preview} alt="" className="w-full h-full object-cover" />
+                <button
+                  onClick={() => removePhoto(i)}
+                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center"
+                >
+                  <X className="w-3 h-3 text-white" />
+                </button>
+              </div>
+            ))}
+            {photos.length < MAX_PHOTOS && (
+              <>
+                <button
+                  onClick={() => cameraRef.current?.click()}
+                  className="w-20 h-20 rounded-xl bg-sundown-card border border-sundown-border flex flex-col items-center justify-center text-sundown-muted hover:text-sundown-text hover:border-sundown-gold/50 transition-colors"
+                >
+                  <Camera className="w-6 h-6 mb-1" />
+                  <span className="text-[10px]">Camera</span>
+                </button>
+                <button
+                  onClick={() => galleryRef.current?.click()}
+                  className="w-20 h-20 rounded-xl bg-sundown-card border border-sundown-border flex flex-col items-center justify-center text-sundown-muted hover:text-sundown-text hover:border-sundown-gold/50 transition-colors"
+                >
+                  <ImageIcon className="w-6 h-6 mb-1" />
+                  <span className="text-[10px]">Gallery</span>
+                </button>
+              </>
+            )}
           </div>
         </section>
 
@@ -205,13 +303,13 @@ export default function LogObservation() {
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-sundown-bg border-t border-sundown-border z-10">
         <Button
           onClick={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || uploading}
           className="w-full h-14 text-lg font-bold shadow-lg shadow-sundown-gold/20"
         >
-          {submitting ? (
+          {(submitting || uploading) ? (
             <Loader2 className="w-5 h-5 animate-spin mr-2" />
           ) : null}
-          Save Observation
+          {uploading ? "Uploading Photos…" : "Save Observation"}
         </Button>
       </div>
     </div>

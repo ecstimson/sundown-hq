@@ -19,7 +19,6 @@ import Checklists from "@/pages/Checklists";
 import SOPs from "@/pages/SOPs";
 import AdminAnimals from "@/pages/admin/Animals";
 import DropPlanner from "@/pages/admin/DropPlanner";
-import ChecklistReview from "@/pages/admin/ChecklistReview";
 import SOPManager from "@/pages/admin/SOPManager";
 import Integrations from "@/pages/admin/Integrations";
 import AdminSchedule from "@/pages/admin/Schedule";
@@ -75,9 +74,10 @@ export default function App() {
         }>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="quick-add" element={<Scan />} />
           <Route path="animals" element={<AdminAnimals />} />
+          <Route path="animals/:id" element={<AnimalDetail />} />
           <Route path="drops" element={<DropPlanner />} />
-          <Route path="checklists" element={<ChecklistReview />} />
           <Route path="schedule" element={<AdminSchedule />} />
           <Route path="messages" element={<GroupChat />} />
           <Route path="sops" element={<SOPManager />} />

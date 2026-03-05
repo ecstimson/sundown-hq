@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from "react-router-dom";
-import { Home, ClipboardList, Book, ScanLine, List, CalendarDays, MessageSquare } from "lucide-react";
+import { Home, ClipboardList, Book, Plus, List, CalendarDays, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function EmployeeLayout() {
@@ -43,9 +43,9 @@ export default function EmployeeLayout() {
           className="flex flex-col items-center justify-center w-full h-full -mt-8"
         >
           <div className="w-14 h-14 rounded-full bg-sundown-gold flex items-center justify-center text-black shadow-lg shadow-sundown-gold/20 border-4 border-sundown-bg">
-            <ScanLine className="w-7 h-7" />
+            <Plus className="w-7 h-7" strokeWidth={2.5} />
           </div>
-          <span className="text-[10px] font-medium uppercase tracking-wide mt-1 text-sundown-gold">Scan</span>
+          <span className="text-[10px] font-medium uppercase tracking-wide mt-1 text-sundown-gold">Add</span>
         </NavLink>
 
         <NavLink

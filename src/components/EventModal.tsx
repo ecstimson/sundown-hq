@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
-import { Loader2, X, Link2, Trash2 } from "lucide-react";
+import { Loader2, X, Link2, Trash2, Plus, GripVertical } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { REPEAT_RULES, REMINDER_OPTIONS, generateShareSlug } from "@/lib/calendarHelpers";
 import type { RepeatRule } from "@/lib/calendarHelpers";
 import type { Calendar, CalendarEvent, EventAttachment } from "@/types/database";
+
+export interface ChecklistItemData {
+  id: number;
+  label: string;
+  completed: boolean;
+  completed_by?: string;
+  completed_at?: string;
+}
 
 export type EventFormData = {
   id?: string;
@@ -23,6 +31,7 @@ export type EventFormData = {
   repeat_until: string;
   reminder_minutes: number;
   share_slug: string;
+  checklist_items: ChecklistItemData[];
 };
 
 function emptyForm(dateKey: string, defaultCalendarId: string): EventFormData {
@@ -41,6 +50,7 @@ function emptyForm(dateKey: string, defaultCalendarId: string): EventFormData {
     repeat_until: "",
     reminder_minutes: 0,
     share_slug: "",
+    checklist_items: [],
   };
 }
 
@@ -66,6 +76,9 @@ function eventToForm(event: CalendarEvent): EventFormData {
     repeat_until: event.repeat_until || "",
     reminder_minutes: event.reminder_minutes?.length ? event.reminder_minutes[0] : 0,
     share_slug: event.share_slug || "",
+    checklist_items: Array.isArray(event.checklist_items)
+      ? (event.checklist_items as unknown as ChecklistItemData[])
+      : [],
   };
 }
 
@@ -94,6 +107,7 @@ export default function EventModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [newItemLabel, setNewItemLabel] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -146,6 +160,7 @@ export default function EventModal({
       repeat_until: form.repeat_until || null,
       reminder_minutes: form.reminder_minutes > 0 ? [form.reminder_minutes] : [],
       share_slug: form.share_slug || null,
+      checklist_items: form.checklist_items.length > 0 ? form.checklist_items : null,
       created_by: employee?.id ?? null,
     };
 
@@ -437,6 +452,83 @@ export default function EventModal({
               rows={3}
               className="w-full px-3 py-2 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text resize-none"
             />
+          </div>
+
+          {/* Checklist Items */}
+          <div>
+            <label className="text-xs text-sundown-muted block mb-1">Checklist Items</label>
+            {form.checklist_items.length > 0 && (
+              <div className="space-y-1 mb-2">
+                {form.checklist_items.map((item, idx) => (
+                  <div key={item.id} className="flex items-center gap-2 group">
+                    <GripVertical className="w-3 h-3 text-sundown-muted/40" />
+                    <span className="text-sm text-sundown-text flex-1">{item.label}</span>
+                    <button
+                      onClick={() =>
+                        setForm((p) => ({
+                          ...p,
+                          checklist_items: p.checklist_items.filter((_, i) => i !== idx),
+                        }))
+                      }
+                      className="opacity-0 group-hover:opacity-100 p-1 text-sundown-muted hover:text-sundown-red transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Add checklist item…"
+                value={newItemLabel}
+                onChange={(e) => setNewItemLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newItemLabel.trim()) {
+                    e.preventDefault();
+                    const nextId = form.checklist_items.length > 0
+                      ? Math.max(...form.checklist_items.map((i) => i.id)) + 1
+                      : 1;
+                    setForm((p) => ({
+                      ...p,
+                      checklist_items: [
+                        ...p.checklist_items,
+                        { id: nextId, label: newItemLabel.trim(), completed: false },
+                      ],
+                    }));
+                    setNewItemLabel("");
+                  }
+                }}
+                className="h-9 flex-1 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sm text-sundown-text placeholder:text-sundown-muted"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                disabled={!newItemLabel.trim()}
+                onClick={() => {
+                  const nextId = form.checklist_items.length > 0
+                    ? Math.max(...form.checklist_items.map((i) => i.id)) + 1
+                    : 1;
+                  setForm((p) => ({
+                    ...p,
+                    checklist_items: [
+                      ...p.checklist_items,
+                      { id: nextId, label: newItemLabel.trim(), completed: false },
+                    ],
+                  }));
+                  setNewItemLabel("");
+                }}
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+            {form.checklist_items.length > 0 && (
+              <p className="text-[10px] text-sundown-muted mt-1">
+                {form.checklist_items.length} item{form.checklist_items.length !== 1 ? "s" : ""} — employees can check these off
+              </p>
+            )}
           </div>
 
           {/* Attachments (only available after first save) */}

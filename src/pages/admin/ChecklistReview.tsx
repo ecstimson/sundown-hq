@@ -68,11 +68,11 @@ export default function ChecklistReview() {
   const [statusMap, setStatusMap] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
+    const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+    const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${new Date(year, month + 1, 0).getDate()}`;
+
     async function fetchMonth() {
       setLoading(true);
-      const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
-      const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${new Date(year, month + 1, 0).getDate()}`;
-
       const { data } = await supabase
         .from("daily_checklists")
         .select("*")
@@ -93,6 +93,28 @@ export default function ChecklistReview() {
       setLoading(false);
     }
     fetchMonth();
+
+    const channel = supabase
+      .channel(`checklists-admin-${year}-${month}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "daily_checklists" },
+        (payload) => {
+          const row = payload.new as DailyChecklist;
+          if (!row.date || row.date < startDate || row.date > endDate) return;
+
+          if (payload.eventType === "INSERT") {
+            setChecklists((prev) => [...prev, row]);
+            const day = parseInt(row.date.split("-")[2]);
+            setStatusMap((prev) => ({ ...prev, [day]: true }));
+          } else if (payload.eventType === "UPDATE") {
+            setChecklists((prev) => prev.map((c) => (c.id === row.id ? row : c)));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [year, month]);
 
   // Filter checklists for selected date

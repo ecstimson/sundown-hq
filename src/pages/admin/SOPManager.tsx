@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Search, Plus, FileText, Eye, Edit, Loader2, BookOpen, X } from "lucide-react";
+import { Search, Plus, FileText, Eye, Edit, Loader2, BookOpen, X, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { SOP } from "@/types/database";
@@ -90,6 +90,21 @@ export default function SOPManager() {
     setSaving(false);
     setShowCreateModal(false);
     await refreshSOPs();
+  }
+
+  async function deleteSOP(sop: SOP) {
+    if (!confirm(`Delete "${sop.title}"? This cannot be undone.`)) return;
+    const { error: delErr } = await supabase.from("sops").delete().eq("id", sop.id);
+    if (delErr) {
+      setError(delErr.message);
+      return;
+    }
+    setSops((prev) => prev.filter((s) => s.id !== sop.id));
+    if (activeSOP?.id === sop.id) {
+      setActiveSOP(null);
+      setShowViewModal(false);
+      setShowEditModal(false);
+    }
   }
 
   function beginEdit(sop: SOP) {
@@ -217,6 +232,14 @@ export default function SOPManager() {
                     >
                       <Edit className="w-4 h-4" />
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-sundown-muted hover:text-sundown-red"
+                      onClick={() => deleteSOP(sop)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
                 <CardTitle className="mt-3 text-lg">{sop.title}</CardTitle>
@@ -288,9 +311,25 @@ export default function SOPManager() {
                 <h3 className="text-lg font-bold text-sundown-text">{activeSOP.title}</h3>
                 <p className="text-sm text-sundown-muted">{activeSOP.category} · v{activeSOP.version}</p>
               </div>
-              <button onClick={() => setShowViewModal(false)} className="text-sundown-muted hover:text-sundown-text">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowViewModal(false); beginEdit(activeSOP); }}
+                  className="text-sundown-muted hover:text-sundown-text p-1"
+                  title="Edit"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => deleteSOP(activeSOP)}
+                  className="text-sundown-muted hover:text-sundown-red p-1"
+                  title="Delete"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <button onClick={() => setShowViewModal(false)} className="text-sundown-muted hover:text-sundown-text p-1">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="p-5 max-h-[65vh] overflow-y-auto">
               <pre className="text-sm text-sundown-text whitespace-pre-wrap font-sans">

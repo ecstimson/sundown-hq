@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
@@ -38,6 +39,7 @@ async function withAuthLockRetry<T extends { error: { message: string } | null }
 
 const STATUS_COLORS: Record<string, string> = {
   Available: "bg-sundown-green text-white",
+  Unlisted: "bg-orange-600 text-white",
   Breeder: "bg-sundown-gold text-black",
   Hold: "bg-blue-600 text-white",
   Listed: "bg-purple-600 text-white",
@@ -46,6 +48,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminAnimals() {
+  const navigate = useNavigate();
   const [animals, setAnimals] = useState<AnimalWithSpecies[]>([]);
   const [speciesList, setSpeciesList] = useState<SpeciesEntry[]>([]);
   const [search, setSearch] = useState("");
@@ -150,17 +153,19 @@ export default function AdminAnimals() {
     fetchData();
   }, []);
 
-  const filtered = animals.filter((a) => {
-    const name = a.species?.common_name || "";
-    const matchSearch =
-      !search ||
-      a.animal_id.toLowerCase().includes(search.toLowerCase()) ||
-      name.toLowerCase().includes(search.toLowerCase()) ||
-      (a.morph_traits || "").toLowerCase().includes(search.toLowerCase());
-    const matchSpecies = speciesFilter === "All Species" || name === speciesFilter;
-    const matchStatus = statusFilter === "All Status" || a.status === statusFilter;
-    return matchSearch && matchSpecies && matchStatus;
-  });
+  const filtered = animals
+    .filter((a) => {
+      const name = a.species?.common_name || "";
+      const matchSearch =
+        !search ||
+        a.animal_id.toLowerCase().includes(search.toLowerCase()) ||
+        name.toLowerCase().includes(search.toLowerCase()) ||
+        (a.morph_traits || "").toLowerCase().includes(search.toLowerCase());
+      const matchSpecies = speciesFilter === "All Species" || name === speciesFilter;
+      const matchStatus = statusFilter === "All Status" || a.status === statusFilter;
+      return matchSearch && matchSpecies && matchStatus;
+    })
+;
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageStart = (currentPage - 1) * pageSize;
@@ -189,9 +194,15 @@ export default function AdminAnimals() {
 
   async function updateAnimalStatus(animalId: string, status: Animal["status"]) {
     setTableError(null);
+    const animal = animals.find((a) => a.id === animalId);
+    const history = Array.isArray(animal?.status_history) ? animal.status_history : [];
+    const newHistory = [
+      ...history,
+      { status, changed_at: new Date().toISOString(), changed_by: null },
+    ];
     const { error } = await (supabase
       .from("animals") as any)
-      .update({ status })
+      .update({ status, status_history: newHistory })
       .eq("id", animalId);
     if (error) {
       setTableError(error.message);
@@ -199,7 +210,7 @@ export default function AdminAnimals() {
     }
 
     setAnimals((prev) =>
-      prev.map((animal) => (animal.id === animalId ? { ...animal, status } : animal))
+      prev.map((a) => (a.id === animalId ? { ...a, status, status_history: newHistory } : a))
     );
   }
 
@@ -575,6 +586,7 @@ export default function AdminAnimals() {
           >
             <option>All Status</option>
             <option>Available</option>
+            <option>Unlisted</option>
             <option>Breeder</option>
             <option>Hold</option>
             <option>Listed</option>
@@ -641,8 +653,13 @@ export default function AdminAnimals() {
                         className="rounded border-sundown-border bg-sundown-card checked:bg-sundown-gold"
                       />
                     </td>
-                    <td className="px-4 py-3 font-medium text-sundown-text">
-                      {animal.animal_id}
+                    <td className="px-4 py-3 font-medium">
+                      <button
+                        onClick={() => navigate(`/admin/animals/${encodeURIComponent(animal.animal_id)}`)}
+                        className="text-sundown-gold hover:underline font-bold"
+                      >
+                        {animal.animal_id}
+                      </button>
                     </td>
                     {visibleColumns.species && (
                       <td className="px-4 py-3 text-sundown-muted">
@@ -710,6 +727,15 @@ export default function AdminAnimals() {
                           <button
                             className="w-full px-3 py-2 text-sm text-sundown-text hover:bg-sundown-bg"
                             onClick={() => {
+                              navigate(`/admin/animals/${encodeURIComponent(animal.animal_id)}`);
+                              setActiveMenuId(null);
+                            }}
+                          >
+                            View Detail
+                          </button>
+                          <button
+                            className="w-full px-3 py-2 text-sm text-sundown-text hover:bg-sundown-bg"
+                            onClick={() => {
                               openEditModal(animal);
                               setActiveMenuId(null);
                             }}
@@ -725,24 +751,18 @@ export default function AdminAnimals() {
                           >
                             Copy Animal ID
                           </button>
-                          <button
-                            className="w-full px-3 py-2 text-sm text-sundown-text hover:bg-sundown-bg"
-                            onClick={async () => {
-                              await updateAnimalStatus(animal.id, "Available");
-                              setActiveMenuId(null);
-                            }}
-                          >
-                            Set Available
-                          </button>
-                          <button
-                            className="w-full px-3 py-2 text-sm text-sundown-text hover:bg-sundown-bg"
-                            onClick={async () => {
-                              await updateAnimalStatus(animal.id, "Hold");
-                              setActiveMenuId(null);
-                            }}
-                          >
-                            Set Hold
-                          </button>
+                          {(["Available", "Unlisted", "Breeder", "Hold", "Listed", "Sold"] as const).map((s) => (
+                            <button
+                              key={s}
+                              className={`w-full px-3 py-2 text-sm hover:bg-sundown-bg ${animal.status === s ? "text-sundown-gold font-bold" : "text-sundown-text"}`}
+                              onClick={async () => {
+                                await updateAnimalStatus(animal.id, s);
+                                setActiveMenuId(null);
+                              }}
+                            >
+                              Set {s}
+                            </button>
+                          ))}
                           <button
                             className="w-full px-3 py-2 text-sm text-sundown-red hover:bg-sundown-bg"
                             onClick={async () => {
@@ -879,6 +899,7 @@ export default function AdminAnimals() {
                     className="w-full h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold"
                   >
                     <option>Available</option>
+                    <option>Unlisted</option>
                     <option>Breeder</option>
                     <option>Hold</option>
                     <option>Listed</option>
@@ -1004,6 +1025,7 @@ export default function AdminAnimals() {
                     className="w-full h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sm text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold"
                   >
                     <option>Available</option>
+                    <option>Unlisted</option>
                     <option>Breeder</option>
                     <option>Hold</option>
                     <option>Listed</option>

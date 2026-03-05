@@ -44,6 +44,27 @@ export default function Checklists() {
       setLoading(false);
     }
     fetchChecklist();
+
+    const channel = supabase
+      .channel(`checklists-employee-${building}-${today}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "daily_checklists", filter: `date=eq.${today}` },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as DailyChecklist;
+            if (row.building === building) {
+              setChecklists((prev) => [...prev, row]);
+            }
+          } else if (payload.eventType === "UPDATE") {
+            const row = payload.new as DailyChecklist;
+            setChecklists((prev) => prev.map((c) => (c.id === row.id ? row : c)));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [today, building]);
 
   async function toggleItem(checklistId: string, id: number) {

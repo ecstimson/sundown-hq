@@ -84,7 +84,7 @@ export interface Database {
           last_weighed: string | null
           morph_traits: string | null
           price: number | null
-          status: 'Breeder' | 'Available' | 'Hold' | 'Listed' | 'Sold' | 'Archived'
+          status: 'Breeder' | 'Available' | 'Unlisted' | 'Hold' | 'Listed' | 'Sold' | 'Archived'
           shopify_product_id: string | null
           morphmarket_id: string | null
           date_listed: string | null
@@ -96,6 +96,7 @@ export interface Database {
           notes: string | null
           listing_readiness_score: number
           last_observation_date: string | null
+          status_history: Json | null
           created_at: string
           updated_at: string
         }
@@ -112,7 +113,7 @@ export interface Database {
           last_weighed?: string | null
           morph_traits?: string | null
           price?: number | null
-          status?: 'Breeder' | 'Available' | 'Hold' | 'Listed' | 'Sold' | 'Archived'
+          status?: 'Breeder' | 'Available' | 'Unlisted' | 'Hold' | 'Listed' | 'Sold' | 'Archived'
           shopify_product_id?: string | null
           morphmarket_id?: string | null
           date_listed?: string | null
@@ -124,6 +125,7 @@ export interface Database {
           notes?: string | null
           listing_readiness_score?: number
           last_observation_date?: string | null
+          status_history?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -140,7 +142,7 @@ export interface Database {
           last_weighed?: string | null
           morph_traits?: string | null
           price?: number | null
-          status?: 'Breeder' | 'Available' | 'Hold' | 'Listed' | 'Sold' | 'Archived'
+          status?: 'Breeder' | 'Available' | 'Unlisted' | 'Hold' | 'Listed' | 'Sold' | 'Archived'
           shopify_product_id?: string | null
           morphmarket_id?: string | null
           date_listed?: string | null
@@ -152,6 +154,7 @@ export interface Database {
           notes?: string | null
           listing_readiness_score?: number
           last_observation_date?: string | null
+          status_history?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -266,16 +269,19 @@ export interface Database {
           id: string
           drop_id: string
           animal_id: string
+          stage: 'candidates' | 'prep' | 'photo' | 'ready'
         }
         Insert: {
           id?: string
           drop_id: string
           animal_id: string
+          stage?: 'candidates' | 'prep' | 'photo' | 'ready'
         }
         Update: {
           id?: string
           drop_id?: string
           animal_id?: string
+          stage?: 'candidates' | 'prep' | 'photo' | 'ready'
         }
       }
       sops: {
@@ -584,6 +590,7 @@ export interface Database {
           repeat_until: string | null
           reminder_minutes: number[]
           share_slug: string | null
+          checklist_items: Json | null
           created_by: string | null
           created_at: string
           updated_at: string
@@ -602,6 +609,7 @@ export interface Database {
           repeat_until?: string | null
           reminder_minutes?: number[]
           share_slug?: string | null
+          checklist_items?: Json | null
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -620,6 +628,7 @@ export interface Database {
           repeat_until?: string | null
           reminder_minutes?: number[]
           share_slug?: string | null
+          checklist_items?: Json | null
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -689,6 +698,7 @@ export type DailyChecklist = Database['public']['Tables']['daily_checklists']['R
 export type Drop = Database['public']['Tables']['drops']['Row']
 export type SOP = Database['public']['Tables']['sops']['Row']
 export type Employee = Database['public']['Tables']['employees']['Row']
+export type DropAnimal = Database['public']['Tables']['drop_animals']['Row']
 export type Pairing = Database['public']['Tables']['pairings']['Row']
 export type EmployeeShift = Database['public']['Tables']['employee_shifts']['Row']
 export type FeedingSchedule = Database['public']['Tables']['feeding_schedule']['Row']
