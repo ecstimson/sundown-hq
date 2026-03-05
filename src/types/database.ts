@@ -383,6 +383,64 @@ export interface Database {
           created_at?: string
         }
       }
+      employee_profiles: {
+        Row: {
+          employee_id: string
+          avatar_url: string | null
+          phone: string | null
+          address: string | null
+          w2_email: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          employee_id: string
+          avatar_url?: string | null
+          phone?: string | null
+          address?: string | null
+          w2_email?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          employee_id?: string
+          avatar_url?: string | null
+          phone?: string | null
+          address?: string | null
+          w2_email?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      employee_time_entries: {
+        Row: {
+          id: string
+          employee_id: string
+          clock_in_at: string
+          clock_out_at: string | null
+          note: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          employee_id: string
+          clock_in_at?: string
+          clock_out_at?: string | null
+          note?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          employee_id?: string
+          clock_in_at?: string
+          clock_out_at?: string | null
+          note?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
       employee_shifts: {
         Row: {
           id: string
@@ -731,6 +789,8 @@ export type Drop = Database['public']['Tables']['drops']['Row']
 export type SOP = Database['public']['Tables']['sops']['Row']
 export type SOPAttachment = Database['public']['Tables']['sop_attachments']['Row']
 export type Employee = Database['public']['Tables']['employees']['Row']
+export type EmployeeProfile = Database['public']['Tables']['employee_profiles']['Row']
+export type EmployeeTimeEntry = Database['public']['Tables']['employee_time_entries']['Row']
 export type DropAnimal = Database['public']['Tables']['drop_animals']['Row']
 export type Pairing = Database['public']['Tables']['pairings']['Row']
 export type EmployeeShift = Database['public']['Tables']['employee_shifts']['Row']

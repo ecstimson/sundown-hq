@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { ClipboardList, Scale, List, AlertTriangle, Calendar, User } from "lucide-react";
+import { ClipboardList, Scale, List, AlertTriangle, Calendar, User, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -71,26 +70,22 @@ export default function EmployeeHome() {
   const firstName = employee?.name?.split(" ")[0] || "Team";
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-5 pb-24">
       {fetchError && (
         <div className="rounded-md bg-sundown-card border-l-4 border-l-sundown-red p-3 text-sm text-sundown-red font-bold">
           {fetchError}
         </div>
       )}
-      {/* Header */}
-      <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-sundown-text">
-            {getGreeting()}, {firstName}
-          </h1>
-          <p className="text-sundown-muted text-sm font-medium">{formatDate(new Date())}</p>
-        </div>
 
-        {/* Building Toggle */}
-        <div className="bg-sundown-card p-1 rounded-lg flex border border-sundown-border w-full max-w-xs">
+      <div className="border border-sundown-border bg-sundown-card p-4 space-y-3">
+        <div>
+          <h1 className="text-xl font-bold text-sundown-text">{getGreeting()}, {firstName}</h1>
+          <p className="text-sundown-muted text-sm">{formatDate(new Date())}</p>
+        </div>
+        <div className="bg-sundown-bg p-1 flex border border-sundown-border w-full max-w-xs">
           <button
             onClick={() => setBuilding("A")}
-            className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${
+            className={`flex-1 py-1.5 text-sm font-bold transition-all ${
               building === "A"
                 ? "bg-sundown-gold text-black shadow-sm"
                 : "text-sundown-muted hover:text-sundown-text"
@@ -100,7 +95,7 @@ export default function EmployeeHome() {
           </button>
           <button
             onClick={() => setBuilding("B")}
-            className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${
+            className={`flex-1 py-1.5 text-sm font-bold transition-all ${
               building === "B"
                 ? "bg-sundown-gold text-black shadow-sm"
                 : "text-sundown-muted hover:text-sundown-text"
@@ -118,7 +113,7 @@ export default function EmployeeHome() {
             Urgent
           </h2>
           {urgentObs.map((obs) => (
-            <Card key={obs.id} className="border-l-4 border-l-sundown-red bg-sundown-card mb-2 border-y border-r border-sundown-border">
+            <Card key={obs.id} className="rounded-none border border-sundown-red/40 bg-sundown-card mb-2">
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-sundown-red shrink-0 mt-0.5" />
@@ -147,20 +142,23 @@ export default function EmployeeHome() {
         <h2 className="text-sm font-bold text-sundown-muted uppercase tracking-wider mb-3">
           Quick Actions
         </h2>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-2">
           <QuickActionButton
             icon={ClipboardList}
-            label="Log Obs."
+            label="Log Observation"
+            description="Record feeding, health, and behavior notes"
             onClick={() => navigate("/employee/scan")}
           />
           <QuickActionButton
             icon={Scale}
-            label="Weigh"
+            label="Weight Check"
+            description={`Building ${building} weight updates`}
             onClick={() => navigate("/employee/scan")}
           />
           <QuickActionButton
             icon={List}
             label="Animals"
+            description="Browse records and open animal detail"
             onClick={() => navigate("/employee/animals")}
           />
         </div>
@@ -173,7 +171,7 @@ export default function EmployeeHome() {
             Weekly Schedule
           </h2>
         </div>
-        <Card>
+        <Card className="rounded-none">
           <CardContent className="p-6">
             <EmptyState
               icon={Calendar}
@@ -190,7 +188,7 @@ export default function EmployeeHome() {
           Recent Activity
         </h2>
         {recentActivity.length > 0 ? (
-          <Card>
+          <Card className="rounded-none">
             <CardContent className="p-0 divide-y divide-sundown-border">
               {recentActivity.map((obs) => (
                 <div key={obs.id} className="p-4 flex items-center gap-3">
@@ -214,7 +212,7 @@ export default function EmployeeHome() {
             </CardContent>
           </Card>
         ) : (
-          <Card>
+          <Card className="rounded-none">
             <CardContent className="p-6">
               <EmptyState
                 icon={User}
@@ -232,21 +230,27 @@ export default function EmployeeHome() {
 function QuickActionButton({
   icon: Icon,
   label,
+  description,
   onClick,
 }: {
   icon: any;
   label: string;
+  description: string;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center justify-center gap-2 p-4 bg-sundown-card border border-sundown-border rounded-xl active:bg-sundown-gold active:border-sundown-gold group transition-colors touch-manipulation"
+      className="w-full border border-sundown-border bg-sundown-card hover:border-sundown-gold/40 hover:translate-x-0.5 transition-all p-4 flex items-center gap-3 text-left"
     >
-      <div className="w-10 h-10 rounded-full bg-sundown-bg flex items-center justify-center text-sundown-gold group-active:text-black transition-colors">
+      <div className="w-10 h-10 bg-sundown-bg border border-sundown-border flex items-center justify-center text-sundown-gold">
         <Icon className="w-5 h-5" />
       </div>
-      <span className="text-xs font-bold text-sundown-text group-active:text-black">{label}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-sundown-text">{label}</p>
+        <p className="text-xs text-sundown-muted truncate">{description}</p>
+      </div>
+      <ChevronRight className="w-4 h-4 text-sundown-muted" />
     </button>
   );
 }

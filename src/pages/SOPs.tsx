@@ -92,7 +92,7 @@ export default function SOPs() {
             placeholder="Search SOPs..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-12 pl-10 pr-4 rounded-xl border border-sundown-border bg-sundown-card text-sundown-text placeholder:text-sundown-muted focus:outline-none focus:border-sundown-gold transition-colors"
+            className="w-full h-12 pl-10 pr-4 border border-sundown-border bg-sundown-card text-sundown-text placeholder:text-sundown-muted focus:outline-none focus:border-sundown-gold transition-colors"
           />
         </div>
       </div>
@@ -112,7 +112,7 @@ export default function SOPs() {
           {filteredCategories.map(([category, items]) => (
             <Card
               key={category}
-              className="active:scale-[0.99] transition-transform cursor-pointer border-sundown-border hover:border-sundown-gold/50"
+              className="rounded-none active:scale-[0.99] transition-transform cursor-pointer border-sundown-border hover:border-sundown-gold/50"
               onClick={() =>
                 setExpandedCategory(
                   expandedCategory === category ? null : category
@@ -121,7 +121,7 @@ export default function SOPs() {
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-sundown-bg border border-sundown-border flex items-center justify-center text-blue-400">
+                  <div className="w-12 h-12 bg-sundown-bg border border-sundown-border flex items-center justify-center text-blue-400">
                     <BookOpen className="w-6 h-6" />
                   </div>
                   <div className="flex-1">
@@ -176,7 +176,7 @@ export default function SOPs() {
 
       {selectedSop && (
         <div className="fixed inset-0 z-50 bg-black/80 p-4 flex items-center justify-center">
-          <div className="w-full max-w-2xl rounded-xl border border-sundown-border bg-sundown-card">
+          <div className="w-full max-w-2xl border border-sundown-border bg-sundown-card">
             <div className="p-4 border-b border-sundown-border flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-sundown-text">{selectedSop.title}</h3>

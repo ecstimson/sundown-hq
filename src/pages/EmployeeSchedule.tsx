@@ -128,7 +128,7 @@ export default function EmployeeSchedule() {
   const defaultCalId = calendars[0]?.id || "";
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4 pb-36">
       {error && (
         <div className="rounded-md border border-sundown-red/30 bg-sundown-red/10 p-3 text-sm text-sundown-red">
           {error}
@@ -308,10 +308,10 @@ export default function EmployeeSchedule() {
           setEditingEvent(null);
           setShowEventModal(true);
         }}
-        className="fixed bottom-8 right-8 h-14 w-14 rounded-full bg-sundown-gold text-black shadow-lg shadow-sundown-gold/30 hover:bg-sundown-gold-hover transition-colors flex items-center justify-center z-30"
+        className="allow-circle fixed bottom-28 right-5 h-16 w-16 rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-400 transition-colors flex items-center justify-center z-40"
         aria-label="Add event"
       >
-        <Plus className="w-6 h-6" />
+        <Plus className="w-8 h-8" strokeWidth={2.6} />
       </button>
 
       {/* Event modal */}

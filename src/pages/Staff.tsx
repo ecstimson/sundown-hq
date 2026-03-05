@@ -7,7 +7,7 @@ import { pinToAuthPassword } from "@/lib/pinAuth";
 import { useAuth } from "@/lib/auth";
 import { EmptyState } from "@/components/ui/EmptyState";
 import EventModal from "@/components/EventModal";
-import type { Employee, Calendar } from "@/types/database";
+import type { Employee, Calendar, EmployeeTimeEntry } from "@/types/database";
 
 type StaffMember = Employee & { auth_email?: string | null };
 
@@ -39,16 +39,33 @@ export default function Staff() {
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [showEventModal, setShowEventModal] = useState(false);
   const [scheduleEmployee, setScheduleEmployee] = useState<StaffMember | null>(null);
+  const [timeEntries, setTimeEntries] = useState<EmployeeTimeEntry[]>([]);
+  const [timecardsError, setTimecardsError] = useState<string | null>(null);
   const todayKey = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
     void loadStaff(true);
     void loadCalendars();
+    void loadTimecards();
   }, []);
 
   async function loadCalendars() {
     const { data } = await supabase.from("calendars").select("*").order("name");
     setCalendars((data as Calendar[]) || []);
+  }
+
+  async function loadTimecards() {
+    setTimecardsError(null);
+    const { data, error } = await (supabase
+      .from("employee_time_entries") as any)
+      .select("*")
+      .order("clock_in_at", { ascending: false })
+      .limit(50);
+    if (error) {
+      setTimecardsError(error.message);
+      return;
+    }
+    setTimeEntries((data as EmployeeTimeEntry[]) || []);
   }
 
   async function loadStaff(withLoading = false) {
@@ -91,6 +108,7 @@ export default function Staff() {
 
   async function refreshStaff() {
     await loadStaff(false);
+    await loadTimecards();
   }
 
   async function handleAddEmployee() {
@@ -205,6 +223,26 @@ export default function Staff() {
   }
 
   const defaultCalId = calendars[0]?.id || "";
+  const nameById = new Map(staff.map((s) => [s.id, s.name]));
+
+  function formatClockTime(iso: string | null) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  function formatDuration(entry: EmployeeTimeEntry) {
+    if (!entry.clock_out_at) return "Open";
+    const diffMs = new Date(entry.clock_out_at).getTime() - new Date(entry.clock_in_at).getTime();
+    const mins = Math.max(0, Math.round(diffMs / 60000));
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${h}h ${m}m`;
+  }
 
   return (
     <div className="space-y-6">
@@ -284,6 +322,45 @@ export default function Staff() {
           ))}
         </div>
       )}
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-sundown-text">Recent Timecards</h3>
+          <Button variant="outline" size="sm" onClick={() => void loadTimecards()}>
+            Refresh
+          </Button>
+        </div>
+        {timecardsError ? (
+          <div className="rounded-md bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">
+            Failed to load timecards: {timecardsError}
+          </div>
+        ) : timeEntries.length === 0 ? (
+          <Card>
+            <CardContent className="p-4 text-sm text-sundown-muted">
+              No clock in/out entries yet.
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <div className="divide-y divide-sundown-border">
+                {timeEntries.map((entry) => (
+                  <div key={entry.id} className="grid grid-cols-4 gap-3 px-4 py-3 text-sm">
+                    <div className="font-semibold text-sundown-text">
+                      {nameById.get(entry.employee_id) || "Unknown"}
+                    </div>
+                    <div className="text-sundown-muted">{formatClockTime(entry.clock_in_at)}</div>
+                    <div className="text-sundown-muted">{formatClockTime(entry.clock_out_at)}</div>
+                    <div className={entry.clock_out_at ? "text-sundown-text" : "text-sundown-gold font-semibold"}>
+                      {formatDuration(entry)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </section>
 
       {/* Add employee modal */}
       {showAddModal && (

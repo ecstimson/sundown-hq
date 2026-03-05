@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, CirclePlus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import EventModal from "@/components/EventModal";
@@ -250,7 +250,7 @@ export default function AdminSchedule() {
         className="fixed bottom-8 right-8 h-14 w-14 rounded-full bg-sundown-gold text-black shadow-lg shadow-sundown-gold/30 hover:bg-sundown-gold-hover transition-colors flex items-center justify-center z-30"
         aria-label="Add event"
       >
-        <Plus className="w-6 h-6" />
+        <CirclePlus className="w-6 h-6" />
       </button>
 
       {/* Event modal */}

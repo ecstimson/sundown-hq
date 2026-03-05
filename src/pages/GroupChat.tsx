@@ -69,7 +69,7 @@ export default function GroupChat() {
 
   return (
     <div className="h-[calc(100vh-10rem)]">
-      <Card className="h-full flex flex-col">
+      <Card className="h-full flex flex-col rounded-none">
         <CardHeader className="border-b border-sundown-border">
           <CardTitle>Group Chat</CardTitle>
         </CardHeader>
@@ -85,7 +85,7 @@ export default function GroupChat() {
                   <p className="text-sm text-sundown-muted">No messages yet. Start the conversation.</p>
                 ) : (
                   messages.map((msg) => (
-                    <div key={msg.id} className="rounded-md border border-sundown-border bg-sundown-bg p-3">
+                    <div key={msg.id} className="border border-sundown-border bg-sundown-bg p-3">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-bold text-sundown-text">{msg.author_name}</p>
                         <p className="text-xs text-sundown-muted">
@@ -100,7 +100,7 @@ export default function GroupChat() {
 
               <div className="border-t border-sundown-border p-3 space-y-2">
                 {error && (
-                  <div className="rounded-md border border-sundown-red/30 bg-sundown-red/10 p-2 text-xs text-sundown-red">
+                  <div className="border border-sundown-red/30 bg-sundown-red/10 p-2 text-xs text-sundown-red">
                     {error}
                   </div>
                 )}
@@ -115,7 +115,7 @@ export default function GroupChat() {
                       }
                     }}
                     placeholder="Type a message..."
-                    className="flex-1 h-11 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
+                    className="flex-1 h-11 px-3 border border-sundown-border bg-sundown-bg text-sundown-text"
                   />
                   <Button onClick={sendMessage} disabled={!canSend} className="gap-2">
                     <Send className="w-4 h-4" />

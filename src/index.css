@@ -23,3 +23,13 @@ body {
   color: var(--color-sundown-text);
   font-family: var(--font-sans);
 }
+
+/* Flat UI pass: remove rounded corners globally. */
+* {
+  border-radius: 0 !important;
+}
+
+/* Explicit allowlist: keep only designated circular action buttons round. */
+.allow-circle {
+  border-radius: 9999px !important;
+}
