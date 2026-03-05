@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
-import { Search, ChevronRight, BookOpen, Loader2, X } from "lucide-react";
+import { Search, ChevronRight, BookOpen, Loader2, X, Paperclip } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { supabase } from "@/lib/supabase";
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { SOP } from "@/types/database";
+import type { SOP, SOPAttachment } from "@/types/database";
 
 export default function SOPs() {
   const [search, setSearch] = useState("");
   const [sops, setSops] = useState<SOP[]>([]);
+  const [attachmentsBySop, setAttachmentsBySop] = useState<Record<string, SOPAttachment[]>>({});
   const [loading, setLoading] = useState(true);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [selectedSop, setSelectedSop] = useState<SOP | null>(null);
@@ -15,16 +16,43 @@ export default function SOPs() {
   useEffect(() => {
     async function fetchSOPs() {
       setLoading(true);
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("sops")
         .select("*")
         .order("sort_order");
 
-      if (data) setSops(data);
+      if (error) {
+        setLoading(false);
+        return;
+      }
+      if (data) {
+        const nextSops = data as SOP[];
+        setSops(nextSops);
+        await hydrateAttachments(nextSops);
+      }
       setLoading(false);
     }
     fetchSOPs();
   }, []);
+
+  async function hydrateAttachments(sourceSops: SOP[]) {
+    if (sourceSops.length === 0) {
+      setAttachmentsBySop({});
+      return;
+    }
+    const ids = sourceSops.map((s) => s.id);
+    const { data } = await (supabase
+      .from("sop_attachments") as any)
+      .select("*")
+      .in("sop_id", ids)
+      .order("created_at");
+    const grouped: Record<string, SOPAttachment[]> = {};
+    for (const item of (data as SOPAttachment[]) || []) {
+      if (!grouped[item.sop_id]) grouped[item.sop_id] = [];
+      grouped[item.sop_id].push(item);
+    }
+    setAttachmentsBySop(grouped);
+  }
 
   // Group by category
   const categories: Record<string, SOP[]> = {};
@@ -116,16 +144,26 @@ export default function SOPs() {
                     {(items as SOP[]).map((sop) => (
                       <button
                         key={sop.id}
-                        className="text-sm text-sundown-text py-1 text-left hover:text-sundown-gold"
+                        className="w-full text-sm text-sundown-text py-1 text-left hover:text-sundown-gold"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedSop(sop);
                         }}
                       >
-                        {sop.title}
-                        <span className="text-xs text-sundown-muted ml-2">
-                          v{sop.version}
-                        </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span>
+                            {sop.title}
+                            <span className="text-xs text-sundown-muted ml-2">
+                              v{sop.version}
+                            </span>
+                          </span>
+                          {(attachmentsBySop[sop.id]?.length || 0) > 0 && (
+                            <span className="inline-flex items-center gap-1 text-xs text-sundown-muted">
+                              <Paperclip className="w-3 h-3" />
+                              {attachmentsBySop[sop.id]?.length}
+                            </span>
+                          )}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -152,6 +190,22 @@ export default function SOPs() {
               <pre className="text-sm whitespace-pre-wrap font-sans text-sundown-text">
                 {selectedSop.content || "(No SOP content yet.)"}
               </pre>
+              {(attachmentsBySop[selectedSop.id]?.length || 0) > 0 && (
+                <div className="mt-5 pt-4 border-t border-sundown-border space-y-2">
+                  <p className="text-xs text-sundown-muted uppercase tracking-wide">Attachments</p>
+                  {attachmentsBySop[selectedSop.id].map((att) => (
+                    <a
+                      key={att.id}
+                      href={att.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-sm text-sundown-gold hover:underline truncate"
+                    >
+                      {att.file_name}
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

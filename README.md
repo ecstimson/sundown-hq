@@ -46,6 +46,9 @@ Run the SQL migrations **in order** in your Supabase SQL Editor (Dashboard → S
 8. `supabase/migrations/008_unified_calendar.sql` — Calendar system with events and sharing
 9. `supabase/migrations/009_storage_buckets.sql` — Storage policies for observation photos
 10. `supabase/migrations/010_drop_planner_stage.sql` — Drop planner Kanban stages
+11. `supabase/migrations/011_calendar_checklist_items.sql` — Calendar checklist fields
+12. `supabase/migrations/012_status_history_and_unlisted.sql` — Animal status history and "Unlisted"
+13. `supabase/migrations/013_sop_attachments_and_pin_login.sql` — SOP attachments + expanded PIN login roster
 
 **Note:** The base tables (species, animals, employees, etc.) must be created first per the schema in `sundown-hq-supabase-guide.md` Section 3.
 
@@ -57,8 +60,25 @@ Create these buckets in Supabase Dashboard → Storage:
 |--------|--------|----------|---------|
 | `observation-photos` | Public | 5 MB | Employee observation photos |
 | `calendar-files` | Public | 10 MB | Calendar event attachments |
+| `sop-files` | Public (dev/test) | 10 MB | SOP document and image attachments |
 
-The storage policies are applied by migration 009.
+Storage policies are applied by migrations 009 and 013.
+
+## Storage Security Rollout (Required Before Production)
+
+Current testing posture keeps the three attachment buckets public for fast QA and sharing. This is acceptable for non-sensitive test content only.
+
+Before production launch, harden storage:
+
+1. Set `observation-photos`, `calendar-files`, and `sop-files` buckets to **Private**.
+2. Replace public URL usage (`getPublicUrl`) with signed URL flow (`createSignedUrl`) in the app.
+3. Keep role-based storage policies (admin upload/delete, authenticated read where appropriate).
+4. Enable Vercel preview protection and add `noindex` for preview/staging environments.
+5. Do not upload sensitive files until private-bucket + signed-URL flow is live.
+
+### What Employees Need To Do
+
+No workflow change is required for employees. They can continue to use name + PIN login. PIN login already creates an authenticated Supabase session behind the scenes, which is enough for private-bucket access.
 
 ## Admin Bootstrap
 

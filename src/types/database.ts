@@ -322,6 +322,38 @@ export interface Database {
           updated_at?: string
         }
       }
+      sop_attachments: {
+        Row: {
+          id: string
+          sop_id: string
+          file_name: string
+          file_url: string
+          file_size: number | null
+          mime_type: string | null
+          uploaded_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          sop_id: string
+          file_name: string
+          file_url: string
+          file_size?: number | null
+          mime_type?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          sop_id?: string
+          file_name?: string
+          file_url?: string
+          file_size?: number | null
+          mime_type?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+      }
       employees: {
         Row: {
           id: string
@@ -697,6 +729,7 @@ export type Observation = Database['public']['Tables']['observations']['Row']
 export type DailyChecklist = Database['public']['Tables']['daily_checklists']['Row']
 export type Drop = Database['public']['Tables']['drops']['Row']
 export type SOP = Database['public']['Tables']['sops']['Row']
+export type SOPAttachment = Database['public']['Tables']['sop_attachments']['Row']
 export type Employee = Database['public']['Tables']['employees']['Row']
 export type DropAnimal = Database['public']['Tables']['drop_animals']['Row']
 export type Pairing = Database['public']['Tables']['pairings']['Row']

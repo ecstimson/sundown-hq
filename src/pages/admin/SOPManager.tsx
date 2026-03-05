@@ -1,13 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Search, Plus, FileText, Eye, Edit, Loader2, BookOpen, X, Trash2 } from "lucide-react";
+import { Search, Plus, FileText, Eye, Edit, Loader2, BookOpen, X, Trash2, Paperclip, Upload } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { SOP } from "@/types/database";
+import { useAuth } from "@/lib/auth";
+import type { SOP, SOPAttachment } from "@/types/database";
 
 export default function SOPManager() {
+  const { employee } = useAuth();
   const [sops, setSops] = useState<SOP[]>([]);
+  const [attachmentsBySop, setAttachmentsBySop] = useState<Record<string, SOPAttachment[]>>({});
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [loading, setLoading] = useState(true);
@@ -17,6 +20,7 @@ export default function SOPManager() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [editForm, setEditForm] = useState({ title: "", category: "", content: "" });
   const [createTemplate, setCreateTemplate] = useState("Opening Procedures");
   const [customSopName, setCustomSopName] = useState("");
@@ -35,11 +39,20 @@ export default function SOPManager() {
     async function fetchSOPs() {
       setLoading(true);
       setError(null);
-      const { data } = await supabase
+      const { data, error: fetchErr } = await supabase
         .from("sops")
         .select("*")
         .order("sort_order");
-      if (data) setSops(data);
+      if (fetchErr) {
+        setError(fetchErr.message);
+        setLoading(false);
+        return;
+      }
+      if (data) {
+        const nextSops = data as SOP[];
+        setSops(nextSops);
+        await hydrateAttachments(nextSops);
+      }
       setLoading(false);
     }
     fetchSOPs();
@@ -63,7 +76,53 @@ export default function SOPManager() {
       setError(refreshErr.message);
       return;
     }
-    if (data) setSops(data);
+    if (data) {
+      const nextSops = data as SOP[];
+      setSops(nextSops);
+      await hydrateAttachments(nextSops);
+    }
+  }
+
+  async function hydrateAttachments(sourceSops: SOP[]) {
+    if (sourceSops.length === 0) {
+      setAttachmentsBySop({});
+      return;
+    }
+    const ids = sourceSops.map((s) => s.id);
+    const { data, error: attachmentErr } = await (supabase
+      .from("sop_attachments") as any)
+      .select("*")
+      .in("sop_id", ids)
+      .order("created_at");
+    if (attachmentErr) {
+      setError(attachmentErr.message);
+      return;
+    }
+    const grouped: Record<string, SOPAttachment[]> = {};
+    for (const item of (data as SOPAttachment[]) || []) {
+      if (!grouped[item.sop_id]) grouped[item.sop_id] = [];
+      grouped[item.sop_id].push(item);
+    }
+    setAttachmentsBySop(grouped);
+  }
+
+  async function loadAttachmentsForSop(sopId: string) {
+    const { data, error: attachmentErr } = await (supabase
+      .from("sop_attachments") as any)
+      .select("*")
+      .eq("sop_id", sopId)
+      .order("created_at");
+    if (attachmentErr) {
+      setError(attachmentErr.message);
+      return;
+    }
+    setAttachmentsBySop((prev) => ({ ...prev, [sopId]: (data as SOPAttachment[]) || [] }));
+  }
+
+  function openView(sop: SOP) {
+    setActiveSOP(sop);
+    setShowViewModal(true);
+    void loadAttachmentsForSop(sop.id);
   }
 
   async function createFromTemplate() {
@@ -100,6 +159,11 @@ export default function SOPManager() {
       return;
     }
     setSops((prev) => prev.filter((s) => s.id !== sop.id));
+    setAttachmentsBySop((prev) => {
+      const next = { ...prev };
+      delete next[sop.id];
+      return next;
+    });
     if (activeSOP?.id === sop.id) {
       setActiveSOP(null);
       setShowViewModal(false);
@@ -111,6 +175,59 @@ export default function SOPManager() {
     setActiveSOP(sop);
     setEditForm({ title: sop.title, category: sop.category, content: sop.content || "" });
     setShowEditModal(true);
+    void loadAttachmentsForSop(sop.id);
+  }
+
+  async function handleAttachmentUpload(e: ChangeEvent<HTMLInputElement>) {
+    if (!activeSOP || !e.target.files?.length) return;
+    const file = e.target.files[0];
+    setError(null);
+    setUploading(true);
+
+    const safeName = file.name.replace(/\s+/g, "-");
+    const path = `sop-attachments/${activeSOP.id}/${Date.now()}-${safeName}`;
+    const { error: uploadErr } = await supabase.storage
+      .from("sop-files")
+      .upload(path, file, { cacheControl: "3600", upsert: false });
+
+    if (uploadErr) {
+      setError(`Upload failed: ${uploadErr.message}`);
+      setUploading(false);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage.from("sop-files").getPublicUrl(path);
+    const fileUrl = urlData?.publicUrl || path;
+
+    const { error: insertErr } = await (supabase
+      .from("sop_attachments") as any)
+      .insert({
+        sop_id: activeSOP.id,
+        file_name: file.name,
+        file_url: fileUrl,
+        file_size: file.size,
+        mime_type: file.type || null,
+        uploaded_by: employee?.id ?? null,
+      });
+
+    if (insertErr) {
+      setError(`Attachment save failed: ${insertErr.message}`);
+      setUploading(false);
+      return;
+    }
+
+    e.target.value = "";
+    setUploading(false);
+    await loadAttachmentsForSop(activeSOP.id);
+  }
+
+  async function deleteAttachment(attachment: SOPAttachment) {
+    const { error: deleteErr } = await supabase.from("sop_attachments").delete().eq("id", attachment.id);
+    if (deleteErr) {
+      setError(deleteErr.message);
+      return;
+    }
+    if (activeSOP) await loadAttachmentsForSop(activeSOP.id);
   }
 
   async function saveEdit() {
@@ -217,10 +334,7 @@ export default function SOPManager() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-sundown-muted hover:text-sundown-text"
-                      onClick={() => {
-                        setActiveSOP(sop);
-                        setShowViewModal(true);
-                      }}
+                      onClick={() => openView(sop)}
                     >
                       <Eye className="w-4 h-4" />
                     </Button>
@@ -248,6 +362,12 @@ export default function SOPManager() {
               <CardContent>
                 <div className="flex items-center justify-between text-xs text-sundown-muted pt-3 border-t border-sundown-border">
                   <span>Version {sop.version}</span>
+                  {(attachmentsBySop[sop.id]?.length || 0) > 0 ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Paperclip className="w-3 h-3" />
+                      {attachmentsBySop[sop.id]?.length}
+                    </span>
+                  ) : null}
                   <span>
                     Updated{" "}
                     {new Date(sop.updated_at).toLocaleDateString("en-US", {
@@ -335,6 +455,22 @@ export default function SOPManager() {
               <pre className="text-sm text-sundown-text whitespace-pre-wrap font-sans">
                 {activeSOP.content || "(Blank content — edit to fill this SOP.)"}
               </pre>
+              {(attachmentsBySop[activeSOP.id]?.length || 0) > 0 && (
+                <div className="mt-5 pt-4 border-t border-sundown-border space-y-2">
+                  <p className="text-xs text-sundown-muted uppercase tracking-wide">Attachments</p>
+                  {attachmentsBySop[activeSOP.id].map((att) => (
+                    <a
+                      key={att.id}
+                      href={att.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-sm text-sundown-gold hover:underline truncate"
+                    >
+                      {att.file_name}
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -366,6 +502,44 @@ export default function SOPManager() {
                 placeholder="Write SOP content..."
                 className="w-full min-h-64 px-3 py-2 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
               />
+              <div className="space-y-2">
+                <label className="text-xs text-sundown-muted uppercase tracking-wide">Attachments</label>
+                <input
+                  type="file"
+                  onChange={handleAttachmentUpload}
+                  accept=".pdf,.doc,.docx,.txt,.rtf,.png,.jpg,.jpeg,.webp,.gif,.heic"
+                  className="text-xs text-sundown-muted file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:bg-sundown-gold/20 file:text-sundown-text"
+                />
+                {uploading && (
+                  <div className="text-xs text-sundown-muted inline-flex items-center gap-1">
+                    <Upload className="w-3 h-3 animate-pulse" /> Uploading attachment...
+                  </div>
+                )}
+                {(attachmentsBySop[activeSOP.id]?.length || 0) > 0 && (
+                  <div className="space-y-1 pt-1">
+                    {attachmentsBySop[activeSOP.id].map((att) => (
+                      <div key={att.id} className="flex items-center justify-between gap-3 text-sm">
+                        <a
+                          href={att.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sundown-gold hover:underline truncate"
+                        >
+                          {att.file_name}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => deleteAttachment(att)}
+                          className="text-sundown-muted hover:text-sundown-red"
+                          title="Delete attachment"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="p-5 border-t border-sundown-border flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
