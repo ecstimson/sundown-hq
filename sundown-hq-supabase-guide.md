@@ -565,41 +565,42 @@ The animal IDs (SR-GG-2025-0147 format) are preserved. Nothing changes from Brya
 ## 11. Implementation Order
 
 Work through these in sequence. Each step builds on the previous one.
+Status below was reviewed on 2026-03-05 against the current codebase/runtime.
 
 ### Phase 1: Foundation (Day 1)
-- [ ] Create Supabase project
-- [ ] Run all SQL schema (tables, indexes, triggers)
-- [ ] Set up RLS policies
+- [x] Create Supabase project
+- [x] Run all SQL schema (tables, indexes, triggers)
+- [x] Set up RLS policies
 - [ ] Create storage bucket
-- [ ] Install @supabase/supabase-js
-- [ ] Create supabase client (`src/lib/supabase.ts`)
-- [ ] Add env vars to `.env.local`
+- [x] Install @supabase/supabase-js
+- [x] Create supabase client (`src/lib/supabase.ts`)
+- [x] Add env vars to `.env.local`
 
 ### Phase 2: Auth (Day 1-2)
-- [ ] Create auth context/provider
-- [ ] Wire up admin login (email/password)
-- [ ] Wire up employee PIN login
-- [ ] Create employee account management in admin dashboard
-- [ ] Add route protection (redirect unauthenticated users)
+- [x] Create auth context/provider
+- [x] Wire up admin login (email/password)
+- [x] Wire up employee PIN login
+- [x] Create employee account management in admin dashboard
+- [x] Add route protection (redirect unauthenticated users)
 
 ### Phase 3: Core Data (Day 2-3)
-- [ ] Replace mock animal data with Supabase queries
-- [ ] Wire up animal list (search, filter, sort)
-- [ ] Wire up animal detail view
-- [ ] Wire up animal CRUD (admin)
-- [ ] Wire up weight updates (employee)
-- [ ] Wire up notes append (employee)
+- [x] Replace mock animal data with Supabase queries
+- [x] Wire up animal list (search, filter, sort)
+- [x] Wire up animal detail view
+- [x] Wire up animal CRUD (admin)
+- [x] Wire up weight updates (employee)
+- [x] Wire up notes append (employee)
 
 ### Phase 4: Observations (Day 3-4)
-- [ ] Wire up observation form → Supabase insert
+- [x] Wire up observation form → Supabase insert
 - [ ] Wire up photo upload → Supabase Storage
-- [ ] Wire up observation history on animal detail
-- [ ] Wire up urgent alert display
+- [x] Wire up observation history on animal detail
+- [x] Wire up urgent alert display
 
 ### Phase 5: Checklists (Day 4-5)
-- [ ] Wire up checklist templates (define items)
-- [ ] Wire up checklist completion flow (employee)
-- [ ] Wire up checklist review (admin)
+- [x] Wire up checklist templates (define items)
+- [x] Wire up checklist completion flow (employee)
+- [x] Wire up checklist review (admin)
 - [ ] Add Realtime subscription for live status
 
 ### Phase 6: Drop Planner (Day 5-7)
@@ -609,9 +610,9 @@ Work through these in sequence. Each step builds on the previous one.
 - [ ] Wire up Shopify/MorphMarket CSV generation (via n8n webhook)
 
 ### Phase 7: SOPs (Day 7)
-- [ ] Wire up SOP CRUD (admin)
-- [ ] Wire up SOP library (employee, read-only)
-- [ ] Wire up SOP search
+- [x] Wire up SOP CRUD (admin)
+- [x] Wire up SOP library (employee, read-only)
+- [x] Wire up SOP search
 
 ### Phase 8: n8n Sync (Day 7-8)
 - [ ] Build Supabase → Google Sheets sync workflow
@@ -622,9 +623,9 @@ Work through these in sequence. Each step builds on the previous one.
 
 ### Phase 9: Polish (Day 8-10)
 - [ ] PWA setup (vite-plugin-pwa, manifest, icons)
-- [ ] Import Bryan's existing animal data
-- [ ] Test with real data
-- [ ] Dark theme matching sundownreptiles.com
+- [x] Import Bryan's existing animal data
+- [x] Test with real data
+- [x] Dark theme matching sundownreptiles.com
 
 ---
 

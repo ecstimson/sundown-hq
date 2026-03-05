@@ -8,6 +8,22 @@ import type { Observation } from "@/types/database";
 import { useAuth } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
 
+function isAuthLockError(message: string) {
+  const text = message.toLowerCase();
+  return text.includes("lock broken") || (text.includes("lock") && text.includes("state"));
+}
+
+async function withAuthLockRetry<T extends { error: { message: string } | null }>(
+  run: () => Promise<T>
+): Promise<T> {
+  const first = await run();
+  if (!first.error || !isAuthLockError(first.error.message)) {
+    return first;
+  }
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  return run();
+}
+
 export default function AdminDashboard() {
   const { employee } = useAuth();
   const navigate = useNavigate();
@@ -34,35 +50,57 @@ export default function AdminDashboard() {
       setFetchError(null);
       const errors: string[] = [];
 
-      const { count: animalCount, error: animalErr } = await supabase
-        .from("animals")
-        .select("*", { count: "exact", head: true });
+      const { count: animalCount, error: animalErr } = await withAuthLockRetry(() =>
+        supabase
+          .from("animals")
+          .select("*", { count: "exact", head: true }) as unknown as Promise<{
+          data: null;
+          error: { message: string } | null;
+          count: number | null;
+        }>
+      );
       if (animalErr) errors.push(`Animals: ${animalErr.message}`);
       if (animalCount !== null) setTotalAnimals(animalCount);
 
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { count: urgCount, error: urgErr } = await supabase
-        .from("observations")
-        .select("*", { count: "exact", head: true })
-        .eq("urgency", "Urgent")
-        .gte("created_at", since);
+      const { count: urgCount, error: urgErr } = await withAuthLockRetry(() =>
+        supabase
+          .from("observations")
+          .select("*", { count: "exact", head: true })
+          .eq("urgency", "Urgent")
+          .gte("created_at", since) as unknown as Promise<{
+          data: null;
+          error: { message: string } | null;
+          count: number | null;
+        }>
+      );
       if (urgErr) errors.push(`Urgent obs: ${urgErr.message}`);
       if (urgCount !== null) setUrgentCount(urgCount);
 
-      const { data: obs, error: obsErr } = await supabase
-        .from("observations")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(5);
+      const { data: obs, error: obsErr } = await withAuthLockRetry(() =>
+        supabase
+          .from("observations")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(5) as unknown as Promise<{
+          data: Observation[] | null;
+          error: { message: string } | null;
+        }>
+      );
       if (obsErr) errors.push(`Recent obs: ${obsErr.message}`);
       if (obs) setRecentObs(obs);
 
-      const { data: drops, error: dropsErr } = await supabase
-        .from("drops")
-        .select("drop_date, drop_id")
-        .gte("drop_date", new Date().toISOString().split("T")[0])
-        .order("drop_date")
-        .limit(1);
+      const { data: drops, error: dropsErr } = await withAuthLockRetry(() =>
+        supabase
+          .from("drops")
+          .select("drop_date, drop_id")
+          .gte("drop_date", new Date().toISOString().split("T")[0])
+          .order("drop_date")
+          .limit(1) as unknown as Promise<{
+          data: { drop_date: string; drop_id: string }[] | null;
+          error: { message: string } | null;
+        }>
+      );
       if (dropsErr) errors.push(`Drops: ${dropsErr.message}`);
       if (drops && drops.length > 0) setNextDrop(drops[0]);
 

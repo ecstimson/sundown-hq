@@ -388,6 +388,11 @@ export interface Database {
           group_name: string | null
           feeding_type: string
           calcium_rotation: string
+          start_time: string | null
+          end_time: string | null
+          repeat_rule: string
+          repeat_interval: number
+          repeat_until: string | null
           notes: string | null
           completed: boolean
           completed_by: string | null
@@ -402,6 +407,11 @@ export interface Database {
           group_name?: string | null
           feeding_type?: string
           calcium_rotation?: string
+          start_time?: string | null
+          end_time?: string | null
+          repeat_rule?: string
+          repeat_interval?: number
+          repeat_until?: string | null
           notes?: string | null
           completed?: boolean
           completed_by?: string | null
@@ -416,6 +426,11 @@ export interface Database {
           group_name?: string | null
           feeding_type?: string
           calcium_rotation?: string
+          start_time?: string | null
+          end_time?: string | null
+          repeat_rule?: string
+          repeat_interval?: number
+          repeat_until?: string | null
           notes?: string | null
           completed?: boolean
           completed_by?: string | null
@@ -502,6 +517,146 @@ export interface Database {
           updated_at?: string
         }
       }
+      calendars: {
+        Row: {
+          id: string
+          name: string
+          color: string
+          visibility: 'private' | 'team' | 'public'
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          color?: string
+          visibility?: 'private' | 'team' | 'public'
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          color?: string
+          visibility?: 'private' | 'team' | 'public'
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      calendar_members: {
+        Row: {
+          id: string
+          calendar_id: string
+          employee_id: string
+          role: 'viewer' | 'editor' | 'owner'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          calendar_id: string
+          employee_id: string
+          role?: 'viewer' | 'editor' | 'owner'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          calendar_id?: string
+          employee_id?: string
+          role?: 'viewer' | 'editor' | 'owner'
+          created_at?: string
+        }
+      }
+      calendar_events: {
+        Row: {
+          id: string
+          calendar_id: string
+          title: string
+          description: string | null
+          location: string | null
+          all_day: boolean
+          start_at: string
+          end_at: string
+          repeat_rule: string
+          repeat_interval: number
+          repeat_until: string | null
+          reminder_minutes: number[]
+          share_slug: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          calendar_id: string
+          title: string
+          description?: string | null
+          location?: string | null
+          all_day?: boolean
+          start_at: string
+          end_at: string
+          repeat_rule?: string
+          repeat_interval?: number
+          repeat_until?: string | null
+          reminder_minutes?: number[]
+          share_slug?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          calendar_id?: string
+          title?: string
+          description?: string | null
+          location?: string | null
+          all_day?: boolean
+          start_at?: string
+          end_at?: string
+          repeat_rule?: string
+          repeat_interval?: number
+          repeat_until?: string | null
+          reminder_minutes?: number[]
+          share_slug?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      event_attachments: {
+        Row: {
+          id: string
+          event_id: string
+          file_name: string
+          file_url: string
+          file_size: number | null
+          mime_type: string | null
+          uploaded_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          file_name: string
+          file_url: string
+          file_size?: number | null
+          mime_type?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          file_name?: string
+          file_url?: string
+          file_size?: number | null
+          mime_type?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -540,3 +695,7 @@ export type FeedingSchedule = Database['public']['Tables']['feeding_schedule']['
 export type ChatMessage = Database['public']['Tables']['chat_messages']['Row']
 export type DashboardPreference = Database['public']['Tables']['dashboard_preferences']['Row']
 export type ChecklistTemplate = Database['public']['Tables']['checklist_templates']['Row']
+export type Calendar = Database['public']['Tables']['calendars']['Row']
+export type CalendarMember = Database['public']['Tables']['calendar_members']['Row']
+export type CalendarEvent = Database['public']['Tables']['calendar_events']['Row']
+export type EventAttachment = Database['public']['Tables']['event_attachments']['Row']

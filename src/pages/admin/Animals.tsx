@@ -20,6 +20,22 @@ import type { Animal, Species } from "@/types/database";
 
 type AnimalWithSpecies = Animal & { species: Pick<Species, "common_name"> };
 
+function isAuthLockError(message: string) {
+  const text = message.toLowerCase();
+  return text.includes("lock broken") || (text.includes("lock") && text.includes("state"));
+}
+
+async function withAuthLockRetry<T extends { error: { message: string } | null }>(
+  run: () => Promise<T>
+): Promise<T> {
+  const first = await run();
+  if (!first.error || !isAuthLockError(first.error.message)) {
+    return first;
+  }
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  return run();
+}
+
 const STATUS_COLORS: Record<string, string> = {
   Available: "bg-sundown-green text-white",
   Breeder: "bg-sundown-gold text-black",
@@ -100,22 +116,30 @@ export default function AdminAnimals() {
     setLoading(true);
     setTableError(null);
 
-    const { data: species, error: speciesErr } = await supabase
-      .from("species")
-      .select("id, common_name, code")
-      .order("common_name");
+    const { data: species, error: speciesErr } = await withAuthLockRetry(async () =>
+      supabase
+        .from("species")
+        .select("id, common_name, code")
+        .order("common_name")
+    );
     if (speciesErr) {
       console.error("Failed to load species:", speciesErr.message);
     }
     if (species) setSpeciesList(species as SpeciesEntry[]);
 
-    const { data, error: animalsErr } = await supabase
-      .from("animals")
-      .select("*, species:species_id(common_name)")
-      .order("animal_id");
+    const { data, error: animalsErr } = await withAuthLockRetry(async () =>
+      supabase
+        .from("animals")
+        .select("*, species:species_id(common_name)")
+        .order("animal_id")
+    );
     if (animalsErr) {
       console.error("Failed to load animals:", animalsErr.message);
-      setTableError(animalsErr.message);
+      setTableError(
+        isAuthLockError(animalsErr.message)
+          ? "Session lock conflict detected. Close duplicate tabs and refresh."
+          : animalsErr.message
+      );
     }
     if (data) setAnimals(data as unknown as AnimalWithSpecies[]);
 

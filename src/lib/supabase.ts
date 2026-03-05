@@ -6,6 +6,17 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabaseConfigValid = Boolean(supabaseUrl && supabaseAnonKey)
 
+function buildAuthStorageKey() {
+  const mode = import.meta.env.MODE || 'unknown'
+  if (!supabaseUrl) return `sundown-hq-auth:${mode}:missing-url`
+  try {
+    const projectRef = new URL(supabaseUrl).hostname.split('.')[0]
+    return `sundown-hq-auth:${mode}:${projectRef}`
+  } catch {
+    return `sundown-hq-auth:${mode}:invalid-url`
+  }
+}
+
 if (!supabaseConfigValid) {
   console.error(
     'Missing Supabase env vars. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local'
@@ -17,7 +28,7 @@ export const supabase = createClient<Database>(
   supabaseAnonKey || 'placeholder-key',
   {
     auth: {
-      storageKey: 'sundown-hq-auth',
+      storageKey: buildAuthStorageKey(),
     },
   }
 )

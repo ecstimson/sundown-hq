@@ -31,10 +31,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (initialized.current) return
     initialized.current = true
 
-    withTimeout(
-      supabase.auth.getSession(),
-      10000,
-      'Session check timed out. Refresh and try again.'
+    withAuthLockRetry(() =>
+      withTimeout(
+        supabase.auth.getSession(),
+        10000,
+        'Session check timed out. Refresh and try again.'
+      )
     )
       .then(({ data: { session } }) => {
         setSession(session)
@@ -67,23 +69,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  function buildFallbackAdminProfile(authUser: User): Employee | null {
-    const email = authUser.email?.toLowerCase()
-    // Employee PIN accounts use the local alias domain; keep these strict.
-    if (!email || email.endsWith('@sundown-hq.local')) return null
+  function isAuthLockError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false
+    const message = error.message.toLowerCase()
+    return (
+      error.name === 'AbortError' ||
+      message.includes('lock broken') ||
+      (message.includes('lock') && message.includes('state'))
+    )
+  }
 
-    const rawName = authUser.user_metadata?.full_name
-      ?? authUser.user_metadata?.name
-      ?? email.split('@')[0]
-
-    return {
-      id: authUser.id,
-      name: String(rawName),
-      pin: '',
-      assigned_buildings: ['A', 'B'],
-      role: 'admin',
-      is_active: true,
-      created_at: new Date().toISOString(),
+  async function withAuthLockRetry<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation()
+    } catch (error) {
+      if (!isAuthLockError(error)) throw error
+      // Browser lock contention can happen across tabs/windows; brief backoff stabilizes auth reads.
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      return operation()
     }
   }
 
@@ -92,14 +95,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let data: Employee | null = null
     let error: { message: string } | null = null
     try {
-      const response = await withTimeout(
-        supabase
-          .from('employees')
-          .select('*')
-          .eq('id', authUser.id)
-          .single() as unknown as Promise<{ data: Employee | null; error: { message: string } | null }>,
-        10000,
-        'Profile lookup timed out. Please try logging in again.'
+      const response = await withAuthLockRetry(() =>
+        withTimeout(
+          supabase
+            .from('employees')
+            .select('*')
+            .eq('id', authUser.id)
+            .single() as unknown as Promise<{ data: Employee | null; error: { message: string } | null }>,
+          10000,
+          'Profile lookup timed out. Please try logging in again.'
+        )
       )
       data = response.data
       error = response.error
@@ -117,24 +122,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const fallbackAdmin = buildFallbackAdminProfile(authUser)
-    if (fallbackAdmin) {
-      setEmployee(fallbackAdmin)
-      setEmployeeError(
-        'Employee profile missing. Using temporary admin fallback for this account.'
-      )
-      setLoading(false)
-      return
-    }
-
     if (error) {
       console.error('Failed to load employee profile:', error.message)
       setEmployeeError(error.message)
-      setEmployee(null)
     } else {
-      setEmployeeError('No employee profile found for this account.')
-      setEmployee(null)
+      setEmployeeError('No employee profile found for this account. Ask an admin to finish account setup.')
     }
+    setEmployee(null)
+    await supabase.auth.signOut()
+    setSession(null)
+    setUser(null)
     setLoading(false)
   }
 
@@ -152,10 +149,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signIn(email: string, password: string) {
-    const { error } = await withTimeout(
-      supabase.auth.signInWithPassword({ email, password }),
-      15000,
-      'Login took too long. Close extra tabs and try again.'
+    const { error } = await withAuthLockRetry(() =>
+      withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        15000,
+        'Login took too long. Close extra tabs and try again.'
+      )
     )
     if (error) throw error
   }
@@ -176,24 +175,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const authEmail = result[0].auth_email
     const derivedPassword = pinToAuthPassword(pin)
-    const { error } = await withTimeout(
-      supabase.auth.signInWithPassword({
-        email: authEmail,
-        password: derivedPassword,
-      }),
-      15000,
-      'Login took too long. Close extra tabs and try again.'
+    const { error } = await withAuthLockRetry(() =>
+      withTimeout(
+        supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: derivedPassword,
+        }),
+        15000,
+        'Login took too long. Close extra tabs and try again.'
+      )
     )
 
     // Backward-compatibility for legacy users created before derived PIN password.
     if (error) {
-      const { error: legacyError } = await withTimeout(
-        supabase.auth.signInWithPassword({
-          email: authEmail,
-          password: pin,
-        }),
-        15000,
-        'Login took too long. Close extra tabs and try again.'
+      const { error: legacyError } = await withAuthLockRetry(() =>
+        withTimeout(
+          supabase.auth.signInWithPassword({
+            email: authEmail,
+            password: pin,
+          }),
+          15000,
+          'Login took too long. Close extra tabs and try again.'
+        )
       )
       if (legacyError) throw legacyError
     }

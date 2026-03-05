@@ -26,6 +26,7 @@ import AdminSchedule from "@/pages/admin/Schedule";
 import EmployeeSchedule from "@/pages/EmployeeSchedule";
 import GroupChat from "@/pages/GroupChat";
 import SystemSettings from "@/pages/admin/SystemSettings";
+import SharedEvent from "@/pages/SharedEvent";
 
 const Placeholder = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-full p-8 text-center space-y-4">
@@ -43,6 +44,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/schedule/event/:slug" element={<SharedEvent />} />
 
         {/* Employee Routes — any authenticated user */}
         <Route path="/employee" element={

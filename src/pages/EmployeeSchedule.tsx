@@ -1,117 +1,262 @@
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Loader2, CalendarDays } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
-import type { EmployeeShift, FeedingSchedule } from "@/types/database";
+import EventModal from "@/components/EventModal";
+import {
+  WEEKDAYS,
+  toDateKey,
+  getMonthGrid,
+  eventOccursOnDate,
+  formatEventTime,
+} from "@/lib/calendarHelpers";
+import type { Calendar, CalendarEvent } from "@/types/database";
 
 export default function EmployeeSchedule() {
   const { employee } = useAuth();
-  const today = new Date().toISOString().split("T")[0];
-  const [shifts, setShifts] = useState<EmployeeShift[]>([]);
-  const [feeding, setFeeding] = useState<FeedingSchedule[]>([]);
+  const todayKey = new Date().toISOString().split("T")[0];
+  const [date, setDate] = useState(todayKey);
+  const [calendars, setCalendars] = useState<Calendar[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+
+  const selected = new Date(`${date}T00:00:00`);
+  const [calYear, setCalYear] = useState(selected.getFullYear());
+  const [calMonth, setCalMonth] = useState(selected.getMonth());
+
+  const monthStart = useMemo(() => toDateKey(calYear, calMonth, 1), [calYear, calMonth]);
+  const monthEnd = useMemo(
+    () => toDateKey(calYear, calMonth, new Date(calYear, calMonth + 1, 0).getDate()),
+    [calYear, calMonth]
+  );
+  const monthGrid = useMemo(() => getMonthGrid(calYear, calMonth), [calYear, calMonth]);
+  const monthLabel = useMemo(
+    () => new Date(calYear, calMonth).toLocaleDateString("en-US", { month: "short" }).toUpperCase(),
+    [calYear, calMonth]
+  );
 
   useEffect(() => {
-    async function fetchSchedule() {
-      if (!employee) return;
-      setLoading(true);
-      setError(null);
-
-      const [{ data: shiftRows, error: shiftErr }, { data: feedRows, error: feedErr }] =
-        await Promise.all([
-          supabase
-            .from("employee_shifts")
-            .select("*")
-            .eq("employee_id", employee.id)
-            .gte("shift_date", today)
-            .order("shift_date")
-            .limit(14),
-          supabase
-            .from("feeding_schedule")
-            .select("*")
-            .eq("schedule_date", today)
-            .order("created_at"),
-        ]);
-
-      if (shiftErr || feedErr) {
-        setError(shiftErr?.message || feedErr?.message || "Failed to load schedule.");
-      }
-      setShifts((shiftRows as EmployeeShift[]) || []);
-      setFeeding((feedRows as FeedingSchedule[]) || []);
-      setLoading(false);
+    const d = new Date(`${date}T00:00:00`);
+    if (d.getFullYear() !== calYear || d.getMonth() !== calMonth) {
+      setCalYear(d.getFullYear());
+      setCalMonth(d.getMonth());
     }
-    fetchSchedule();
-  }, [employee, today]);
+  }, [date, calYear, calMonth]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-56">
-        <Loader2 className="w-8 h-8 animate-spin text-sundown-gold" />
-      </div>
-    );
+  useEffect(() => {
+    fetchData();
+  }, [monthStart, monthEnd]);
+
+  async function fetchData() {
+    setLoading(true);
+    setError(null);
+    const [{ data: cals, error: calErr }, { data: evts, error: evtErr }] = await Promise.all([
+      supabase.from("calendars").select("*").order("name"),
+      supabase
+        .from("calendar_events")
+        .select("*")
+        .lte("start_at", `${monthEnd}T23:59:59`)
+        .gte("end_at", `${monthStart}T00:00:00`)
+        .order("start_at"),
+    ]);
+
+    if (calErr || evtErr) {
+      setError(calErr?.message || evtErr?.message || "Failed to load calendar data.");
+    }
+    setCalendars((cals as Calendar[]) || []);
+    setEvents((evts as CalendarEvent[]) || []);
+    setLoading(false);
   }
+
+  const monthActivity = useMemo(() => {
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const map: Record<string, number> = {};
+    for (let day = 1; day <= daysInMonth; day++) {
+      const key = toDateKey(calYear, calMonth, day);
+      const count = events.filter((e) => eventOccursOnDate(e, key)).length;
+      if (count > 0) map[key] = count;
+    }
+    return map;
+  }, [events, calYear, calMonth]);
+
+  const selectedEvents = useMemo(
+    () =>
+      events
+        .filter((e) => eventOccursOnDate(e, date))
+        .sort((a, b) => a.start_at.localeCompare(b.start_at)),
+    [events, date]
+  );
+
+  const calendarColorMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of calendars) m[c.id] = c.color;
+    return m;
+  }, [calendars]);
+
+  function move(dir: "prev" | "next") {
+    if (dir === "prev") {
+      if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1); }
+      else setCalMonth((m) => m - 1);
+    } else {
+      if (calMonth === 11) { setCalMonth(0); setCalYear((y) => y + 1); }
+      else setCalMonth((m) => m + 1);
+    }
+  }
+
+  function handleDateClick(dayKey: string) {
+    if (dayKey === date) {
+      setEditingEvent(null);
+      setShowEventModal(true);
+    } else {
+      setDate(dayKey);
+    }
+  }
+
+  function openEditEvent(event: CalendarEvent) {
+    setEditingEvent(event);
+    setShowEventModal(true);
+  }
+
+  const selectedDateObj = new Date(`${date}T00:00:00`);
+  const dayNum = selectedDateObj.getDate();
+  const dayName = selectedDateObj.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  const defaultCalId = calendars[0]?.id || "";
 
   return (
     <div className="space-y-4 pb-24">
-      <div>
-        <h1 className="text-xl font-bold text-sundown-text">My Schedule</h1>
-        <p className="text-sm text-sundown-muted">Shifts and feeding plan with calcium rotation</p>
-      </div>
-
       {error && (
         <div className="rounded-md border border-sundown-red/30 bg-sundown-red/10 p-3 text-sm text-sundown-red">
           {error}
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarDays className="w-5 h-5 text-sundown-gold" />
-            Upcoming Shifts
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {shifts.length === 0 ? (
-            <p className="text-sm text-sundown-muted">No upcoming shifts assigned yet.</p>
-          ) : (
-            shifts.map((shift) => (
-              <div key={shift.id} className="rounded-md border border-sundown-border bg-sundown-bg p-3">
-                <p className="font-bold text-sundown-text">{new Date(shift.shift_date).toLocaleDateString()}</p>
-                <p className="text-sm text-sundown-muted">
-                  {shift.shift_type}
-                  {(shift.start_time || shift.end_time) ? ` · ${shift.start_time || "--"}-${shift.end_time || "--"}` : ""}
-                </p>
-                {shift.notes && <p className="text-xs text-sundown-muted mt-1">{shift.notes}</p>}
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+      {/* Month header */}
+      <div className="flex items-center justify-between px-1">
+        <h2 className="text-2xl font-bold tracking-wide text-sundown-text uppercase">{monthLabel}</h2>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={() => move("prev")}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => move("next")}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Today&apos;s Feeding + Calcium Rotation</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {feeding.length === 0 ? (
-            <p className="text-sm text-sundown-muted">No feeding tasks for today.</p>
-          ) : (
-            feeding.map((event) => (
-              <div key={event.id} className="rounded-md border border-sundown-border bg-sundown-bg p-3">
-                <p className="font-bold text-sundown-text">{event.group_name || "Group task"}</p>
-                <p className="text-sm text-sundown-muted">
-                  {event.feeding_type} · Calcium: <span className="text-sundown-gold font-bold">{event.calcium_rotation}</span>
-                </p>
-                {event.notes && <p className="text-xs text-sundown-muted mt-1">{event.notes}</p>}
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+      {/* Weekday header */}
+      <div className="grid grid-cols-7 text-xs text-sundown-muted px-1">
+        {WEEKDAYS.map((d, i) => (
+          <div key={`${d}-${i}`} className="text-center font-semibold py-1">{d}</div>
+        ))}
+      </div>
+
+      {/* Month grid */}
+      <div className="space-y-1 px-1">
+        {monthGrid.map((week, wi) => (
+          <div key={wi} className="grid grid-cols-7">
+            {week.map((day, di) => {
+              if (!day) return <div key={`${wi}-${di}`} className="h-14" />;
+              const dayKey = toDateKey(calYear, calMonth, day);
+              const isSelected = dayKey === date;
+              const isToday = dayKey === todayKey;
+              const count = monthActivity[dayKey] || 0;
+              return (
+                <button
+                  key={dayKey}
+                  onClick={() => handleDateClick(dayKey)}
+                  className="h-14 flex flex-col items-center justify-center relative"
+                >
+                  <span
+                    className={`w-9 h-9 flex items-center justify-center rounded-full text-sm transition-colors ${
+                      isSelected
+                        ? "bg-sundown-gold/20 text-sundown-text font-bold"
+                        : isToday
+                          ? "ring-1 ring-sundown-gold/50 text-sundown-text font-semibold"
+                          : "text-sundown-muted"
+                    }`}
+                  >
+                    {day}
+                  </span>
+                  {count > 0 && (
+                    <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-0.5">
+                      {Array.from({ length: Math.min(count, 3) }).map((_, j) => (
+                        <span key={j} className="w-1 h-1 rounded-full bg-sundown-gold" />
+                      ))}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Selected day detail */}
+      <div className="border-t border-sundown-border pt-4 px-1 space-y-3">
+        <h3 className="text-2xl font-bold text-sundown-text">
+          {dayNum}
+          <span className="text-sm font-semibold text-sundown-muted ml-2">{dayName}</span>
+        </h3>
+
+        {loading ? (
+          <div className="flex items-center justify-center h-20">
+            <Loader2 className="w-5 h-5 animate-spin text-sundown-gold" />
+          </div>
+        ) : selectedEvents.length === 0 ? (
+          <p className="text-sm text-sundown-muted">No events for this day. Tap + to create one.</p>
+        ) : (
+          <div className="space-y-2">
+            {selectedEvents.map((event) => {
+              const color = calendarColorMap[event.calendar_id] || "#D4A843";
+              return (
+                <button
+                  key={event.id}
+                  onClick={() => openEditEvent(event)}
+                  className="w-full text-left rounded-xl border border-sundown-border bg-sundown-bg px-3 py-2 hover:border-sundown-gold/40 transition-colors"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="w-1 self-stretch rounded-full shrink-0 mt-0.5" style={{ backgroundColor: color }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sundown-text font-semibold truncate">{event.title}</p>
+                      <p className="text-xs text-sundown-muted">
+                        {formatEventTime(event)}
+                        {event.location ? ` · ${event.location}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* FAB */}
+      <button
+        onClick={() => {
+          setEditingEvent(null);
+          setShowEventModal(true);
+        }}
+        className="fixed bottom-8 right-8 h-14 w-14 rounded-full bg-sundown-gold text-black shadow-lg shadow-sundown-gold/30 hover:bg-sundown-gold-hover transition-colors flex items-center justify-center z-30"
+        aria-label="Add event"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
+
+      {/* Event modal */}
+      <EventModal
+        open={showEventModal}
+        onClose={() => { setShowEventModal(false); setEditingEvent(null); }}
+        onSaved={fetchData}
+        calendars={calendars}
+        defaultDate={date}
+        defaultCalendarId={defaultCalId}
+        editEvent={editingEvent}
+      />
     </div>
   );
 }
-

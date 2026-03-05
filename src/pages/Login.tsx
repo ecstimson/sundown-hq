@@ -14,12 +14,18 @@ interface EmployeeOption {
 
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 6;
+const PIN_REGEX = /^\d{4,6}$/;
+
+function isAuthLockError(message: string) {
+  const text = message.toLowerCase();
+  return text.includes("lock broken") || (text.includes("lock") && text.includes("state"));
+}
 
 export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isAdminMode = searchParams.get("mode") === "admin";
-  const { user, employee, signIn, signInWithPin } = useAuth();
+  const { user, employee, signIn, signInWithPin, signOut } = useAuth();
 
   // Employee PIN state
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -35,18 +41,14 @@ export default function Login() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redirect if already logged in
-  useEffect(() => {
-    if (user && employee) {
-      // Admins can intentionally use employee mode for shift/training flows.
-      const isPrivilegedRole = ["admin", "super_admin"].includes(employee.role);
-      if (isAdminMode && isPrivilegedRole) {
-        navigate("/admin/dashboard", { replace: true });
-      } else {
-        navigate("/employee/dashboard", { replace: true });
-      }
-    }
-  }, [user, employee, isAdminMode, navigate]);
+  const isSignedIn = Boolean(user && employee);
+
+  function getSignedInDestination() {
+    if (!employee) return "/employee/dashboard";
+    const isPrivilegedRole = ["admin", "super_admin"].includes(employee.role);
+    if (isAdminMode && isPrivilegedRole) return "/admin/dashboard";
+    return "/employee/dashboard";
+  }
 
   // Fetch active employee names via secure RPC (no direct table access needed)
   useEffect(() => {
@@ -55,16 +57,25 @@ export default function Login() {
         setError("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.");
         return;
       }
-      supabase
-        .rpc("get_active_employee_names")
-        .then(({ data, error }) => {
-          if (error) {
-            console.error("Failed to load employee names:", error.message);
-            setError("Unable to load employee list. Check Supabase functions/migrations and API keys.");
-            return;
-          }
-          if (data) setEmployees(data as EmployeeOption[]);
-        });
+      let cancelled = false;
+      (async () => {
+        let response: { data: unknown; error: { message: string } | null } =
+          await supabase.rpc("get_active_employee_names");
+        if (response.error && isAuthLockError(response.error.message)) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          response = await supabase.rpc("get_active_employee_names");
+        }
+        if (cancelled) return;
+        if (response.error) {
+          console.error("Failed to load employee names:", response.error.message);
+          setError("Unable to load employee list. Check Supabase functions/migrations and API keys.");
+          return;
+        }
+        if (response.data) setEmployees(response.data as EmployeeOption[]);
+      })();
+      return () => {
+        cancelled = true;
+      };
     }
   }, [isAdminMode]);
 
@@ -115,8 +126,10 @@ export default function Login() {
     try {
       try {
         await signIn(email, password);
-      } catch {
-        // Convenience fallback for environments where PIN-derived auth passwords are used.
+      } catch (firstErr) {
+        // Compatibility fallback: if admin enters a numeric PIN in the password field,
+        // retry with the derived auth password format.
+        if (!PIN_REGEX.test(password)) throw firstErr;
         await signIn(email, pinToAuthPassword(password));
       }
       navigate("/admin/dashboard", { replace: true });
@@ -126,6 +139,53 @@ export default function Login() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  if (isSignedIn) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-sundown-bg p-6 max-w-md mx-auto w-full">
+        <div className="w-full rounded-xl border border-sundown-border bg-sundown-card p-6 space-y-5">
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold text-sundown-text">You are already signed in</h1>
+            <p className="text-sm text-sundown-muted">
+              Signed in as <span className="text-sundown-text font-medium">{user?.email || employee?.name}</span>.
+            </p>
+            <p className="text-xs text-sundown-muted">
+              If this is not you, sign out before logging in with another account.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button className="flex-1" onClick={() => navigate(getSignedInDestination(), { replace: true })}>
+              Continue
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={async () => {
+                setIsLoading(true);
+                setError("");
+                try {
+                  await signOut();
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : "Sign out failed.";
+                  setError(message);
+                } finally {
+                  setIsLoading(false);
+                }
+              }}
+              disabled={isLoading}
+            >
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Not you? Sign out"}
+            </Button>
+          </div>
+          {error && (
+            <div className="bg-sundown-card border border-sundown-red rounded-lg p-3">
+              <p className="text-sundown-red text-sm text-center font-bold">{error}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   // Admin email/password login

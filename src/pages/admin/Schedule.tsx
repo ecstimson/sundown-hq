@@ -1,281 +1,268 @@
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
-import type { Employee, EmployeeShift, FeedingSchedule } from "@/types/database";
+import EventModal from "@/components/EventModal";
+import {
+  WEEKDAYS,
+  toDateKey,
+  getMonthGrid,
+  eventOccursOnDate,
+  formatEventTime,
+} from "@/lib/calendarHelpers";
+import type { Calendar, CalendarEvent } from "@/types/database";
 
 export default function AdminSchedule() {
   const { employee } = useAuth();
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [shifts, setShifts] = useState<EmployeeShift[]>([]);
-  const [feeding, setFeeding] = useState<FeedingSchedule[]>([]);
+  const todayKey = new Date().toISOString().split("T")[0];
+  const [date, setDate] = useState(todayKey);
+  const [calendars, setCalendars] = useState<Calendar[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
 
-  const [shiftForm, setShiftForm] = useState({
-    employee_id: "",
-    shift_type: "General",
-    start_time: "",
-    end_time: "",
-    notes: "",
-  });
-  const [feedingForm, setFeedingForm] = useState({
-    group_name: "",
-    feeding_type: "Regular",
-    calcium_rotation: "None",
-    notes: "",
-  });
+  const selected = new Date(`${date}T00:00:00`);
+  const [calYear, setCalYear] = useState(selected.getFullYear());
+  const [calMonth, setCalMonth] = useState(selected.getMonth());
+
+  const monthStart = useMemo(() => toDateKey(calYear, calMonth, 1), [calYear, calMonth]);
+  const monthEnd = useMemo(
+    () => toDateKey(calYear, calMonth, new Date(calYear, calMonth + 1, 0).getDate()),
+    [calYear, calMonth]
+  );
+  const monthGrid = useMemo(() => getMonthGrid(calYear, calMonth), [calYear, calMonth]);
+  const monthLabel = useMemo(
+    () => new Date(calYear, calMonth).toLocaleDateString("en-US", { month: "short" }).toUpperCase(),
+    [calYear, calMonth]
+  );
+
+  useEffect(() => {
+    const d = new Date(`${date}T00:00:00`);
+    if (d.getFullYear() !== calYear || d.getMonth() !== calMonth) {
+      setCalYear(d.getFullYear());
+      setCalMonth(d.getMonth());
+    }
+  }, [date, calYear, calMonth]);
+
+  useEffect(() => {
+    fetchData();
+  }, [monthStart, monthEnd]);
 
   async function fetchData() {
     setLoading(true);
     setError(null);
+    const [{ data: cals, error: calErr }, { data: evts, error: evtErr }] = await Promise.all([
+      supabase.from("calendars").select("*").order("name"),
+      supabase
+        .from("calendar_events")
+        .select("*")
+        .lte("start_at", `${monthEnd}T23:59:59`)
+        .gte("end_at", `${monthStart}T00:00:00`)
+        .order("start_at"),
+    ]);
 
-    const [{ data: staff, error: staffErr }, { data: shiftRows, error: shiftErr }, { data: feedRows, error: feedErr }] =
-      await Promise.all([
-        supabase.from("employees").select("*").eq("is_active", true).order("name"),
-        supabase.from("employee_shifts").select("*").eq("shift_date", date).order("start_time"),
-        supabase.from("feeding_schedule").select("*").eq("schedule_date", date).order("created_at"),
-      ]);
-
-    if (staffErr || shiftErr || feedErr) {
-      setError(staffErr?.message || shiftErr?.message || feedErr?.message || "Failed to load schedule data.");
+    if (calErr || evtErr) {
+      setError(calErr?.message || evtErr?.message || "Failed to load calendar data.");
     }
-    setEmployees((staff as Employee[]) || []);
-    setShifts((shiftRows as EmployeeShift[]) || []);
-    setFeeding((feedRows as FeedingSchedule[]) || []);
+    setCalendars((cals as Calendar[]) || []);
+    setEvents((evts as CalendarEvent[]) || []);
     setLoading(false);
   }
 
-  useEffect(() => {
-    fetchData();
-  }, [date]);
+  const monthActivity = useMemo(() => {
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const map: Record<string, number> = {};
+    for (let day = 1; day <= daysInMonth; day++) {
+      const key = toDateKey(calYear, calMonth, day);
+      const count = events.filter((e) => eventOccursOnDate(e, key)).length;
+      if (count > 0) map[key] = count;
+    }
+    return map;
+  }, [events, calYear, calMonth]);
 
-  async function addShift() {
-    if (!shiftForm.employee_id) {
-      setError("Select an employee before adding a shift.");
-      return;
+  const selectedEvents = useMemo(
+    () =>
+      events
+        .filter((e) => eventOccursOnDate(e, date))
+        .sort((a, b) => a.start_at.localeCompare(b.start_at)),
+    [events, date]
+  );
+
+  const calendarColorMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of calendars) m[c.id] = c.color;
+    return m;
+  }, [calendars]);
+
+  function move(dir: "prev" | "next") {
+    if (dir === "prev") {
+      if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1); }
+      else setCalMonth((m) => m - 1);
+    } else {
+      if (calMonth === 11) { setCalMonth(0); setCalYear((y) => y + 1); }
+      else setCalMonth((m) => m + 1);
     }
-    const { error: insertErr } = await supabase.from("employee_shifts").insert({
-      shift_date: date,
-      employee_id: shiftForm.employee_id,
-      shift_type: shiftForm.shift_type,
-      start_time: shiftForm.start_time || null,
-      end_time: shiftForm.end_time || null,
-      notes: shiftForm.notes || null,
-      created_by: employee?.id ?? null,
-    } as any);
-    if (insertErr) {
-      setError(insertErr.message);
-      return;
-    }
-    setShiftForm({ employee_id: "", shift_type: "General", start_time: "", end_time: "", notes: "" });
-    await fetchData();
   }
 
-  async function addFeedingEvent() {
-    if (!feedingForm.group_name.trim()) {
-      setError("Group/animal reference is required.");
-      return;
+  function handleDateClick(dayKey: string) {
+    if (dayKey === date) {
+      setEditingEvent(null);
+      setShowEventModal(true);
+    } else {
+      setDate(dayKey);
     }
-    const { error: insertErr } = await supabase.from("feeding_schedule").insert({
-      schedule_date: date,
-      group_name: feedingForm.group_name.trim(),
-      feeding_type: feedingForm.feeding_type,
-      calcium_rotation: feedingForm.calcium_rotation,
-      notes: feedingForm.notes || null,
-      created_by: employee?.id ?? null,
-    } as any);
-    if (insertErr) {
-      setError(insertErr.message);
-      return;
-    }
-    setFeedingForm({ group_name: "", feeding_type: "Regular", calcium_rotation: "None", notes: "" });
-    await fetchData();
   }
 
-  async function removeShift(id: string) {
-    const { error: deleteErr } = await supabase.from("employee_shifts").delete().eq("id", id);
-    if (deleteErr) {
-      setError(deleteErr.message);
-      return;
-    }
-    await fetchData();
+  function openEditEvent(event: CalendarEvent) {
+    setEditingEvent(event);
+    setShowEventModal(true);
   }
 
-  async function removeFeedingEvent(id: string) {
-    const { error: deleteErr } = await supabase.from("feeding_schedule").delete().eq("id", id);
-    if (deleteErr) {
-      setError(deleteErr.message);
-      return;
-    }
-    await fetchData();
-  }
+  const selectedDateObj = new Date(`${date}T00:00:00`);
+  const dayNum = selectedDateObj.getDate();
+  const dayName = selectedDateObj.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  const defaultCalId = calendars[0]?.id || "";
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-sundown-text">Operations Schedule</h1>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-card text-sundown-text"
-        />
-      </div>
-
+    <div className="space-y-4 pb-24">
       {error && (
         <div className="rounded-md border border-sundown-red/30 bg-sundown-red/10 p-3 text-sm text-sundown-red">
           {error}
         </div>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center h-56">
-          <Loader2 className="w-8 h-8 animate-spin text-sundown-gold" />
+      {/* Month header */}
+      <div className="flex items-center justify-between px-1">
+        <h2 className="text-2xl font-bold tracking-wide text-sundown-text uppercase">{monthLabel}</h2>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={() => move("prev")}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => move("next")}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Employee Shifts</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <select
-                  value={shiftForm.employee_id}
-                  onChange={(e) => setShiftForm((prev) => ({ ...prev, employee_id: e.target.value }))}
-                  className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
-                >
-                  <option value="">Select employee</option>
-                  {employees.map((staff) => (
-                    <option key={staff.id} value={staff.id}>{staff.name}</option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder="Shift type (Feeding AM, Cleaning...)"
-                  value={shiftForm.shift_type}
-                  onChange={(e) => setShiftForm((prev) => ({ ...prev, shift_type: e.target.value }))}
-                  className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
-                />
-                <input
-                  type="time"
-                  value={shiftForm.start_time}
-                  onChange={(e) => setShiftForm((prev) => ({ ...prev, start_time: e.target.value }))}
-                  className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
-                />
-                <input
-                  type="time"
-                  value={shiftForm.end_time}
-                  onChange={(e) => setShiftForm((prev) => ({ ...prev, end_time: e.target.value }))}
-                  className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
-                />
-              </div>
-              <input
-                type="text"
-                placeholder="Notes"
-                value={shiftForm.notes}
-                onChange={(e) => setShiftForm((prev) => ({ ...prev, notes: e.target.value }))}
-                className="h-10 w-full px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
-              />
-              <Button onClick={addShift} className="gap-2"><Plus className="w-4 h-4" /> Add Shift</Button>
+      </div>
 
-              <div className="pt-3 space-y-2">
-                {shifts.length === 0 ? (
-                  <p className="text-sm text-sundown-muted">No shifts scheduled for this date.</p>
-                ) : (
-                  shifts.map((shift) => {
-                    const staff = employees.find((s) => s.id === shift.employee_id);
-                    return (
-                      <div key={shift.id} className="flex items-center justify-between rounded-md border border-sundown-border bg-sundown-bg px-3 py-2">
-                        <div className="text-sm">
-                          <p className="font-bold text-sundown-text">{staff?.name || "Unknown employee"}</p>
-                          <p className="text-sundown-muted">
-                            {shift.shift_type}
-                            {(shift.start_time || shift.end_time) ? ` · ${shift.start_time || "--"}-${shift.end_time || "--"}` : ""}
-                          </p>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => removeShift(shift.id)}>
-                          <Trash2 className="w-4 h-4 text-sundown-red" />
-                        </Button>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </CardContent>
-          </Card>
+      {/* Weekday header */}
+      <div className="grid grid-cols-7 text-xs text-sundown-muted px-1">
+        {WEEKDAYS.map((d, i) => (
+          <div key={`${d}-${i}`} className="text-center font-semibold py-1">{d}</div>
+        ))}
+      </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Feeding Schedule + Calcium Rotation</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <input
-                type="text"
-                placeholder="Animal or group name"
-                value={feedingForm.group_name}
-                onChange={(e) => setFeedingForm((prev) => ({ ...prev, group_name: e.target.value }))}
-                className="h-10 w-full px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <select
-                  value={feedingForm.feeding_type}
-                  onChange={(e) => setFeedingForm((prev) => ({ ...prev, feeding_type: e.target.value }))}
-                  className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
+      {/* Month grid */}
+      <div className="space-y-1 px-1">
+        {monthGrid.map((week, wi) => (
+          <div key={wi} className="grid grid-cols-7">
+            {week.map((day, di) => {
+              if (!day) return <div key={`${wi}-${di}`} className="h-14" />;
+              const dayKey = toDateKey(calYear, calMonth, day);
+              const isSelected = dayKey === date;
+              const isToday = dayKey === todayKey;
+              const count = monthActivity[dayKey] || 0;
+              return (
+                <button
+                  key={dayKey}
+                  onClick={() => handleDateClick(dayKey)}
+                  className="h-14 flex flex-col items-center justify-center relative"
                 >
-                  <option>Regular</option>
-                  <option>Heavy</option>
-                  <option>Light</option>
-                  <option>Fasting</option>
-                </select>
-                <select
-                  value={feedingForm.calcium_rotation}
-                  onChange={(e) => setFeedingForm((prev) => ({ ...prev, calcium_rotation: e.target.value }))}
-                  className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
-                >
-                  <option>None</option>
-                  <option>Light Dust</option>
-                  <option>Full Dust</option>
-                  <option>Rotation A</option>
-                  <option>Rotation B</option>
-                  <option>Rotation C</option>
-                </select>
-              </div>
-              <input
-                type="text"
-                placeholder="Notes"
-                value={feedingForm.notes}
-                onChange={(e) => setFeedingForm((prev) => ({ ...prev, notes: e.target.value }))}
-                className="h-10 w-full px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
-              />
-              <Button onClick={addFeedingEvent} className="gap-2"><Plus className="w-4 h-4" /> Add Feeding Event</Button>
+                  <span
+                    className={`w-9 h-9 flex items-center justify-center rounded-full text-sm transition-colors ${
+                      isSelected
+                        ? "bg-sundown-gold/20 text-sundown-text font-bold"
+                        : isToday
+                          ? "ring-1 ring-sundown-gold/50 text-sundown-text font-semibold"
+                          : "text-sundown-muted"
+                    }`}
+                  >
+                    {day}
+                  </span>
+                  {count > 0 && (
+                    <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-0.5">
+                      {Array.from({ length: Math.min(count, 3) }).map((_, j) => (
+                        <span key={j} className="w-1 h-1 rounded-full bg-sundown-gold" />
+                      ))}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
 
-              <div className="pt-3 space-y-2">
-                {feeding.length === 0 ? (
-                  <p className="text-sm text-sundown-muted">No feeding events for this date.</p>
-                ) : (
-                  feeding.map((event) => (
-                    <div key={event.id} className="flex items-center justify-between rounded-md border border-sundown-border bg-sundown-bg px-3 py-2">
-                      <div className="text-sm">
-                        <p className="font-bold text-sundown-text">{event.group_name || "Group"}</p>
-                        <p className="text-sundown-muted">{event.feeding_type} · Calcium: {event.calcium_rotation}</p>
-                      </div>
-                      <Button variant="ghost" size="sm" onClick={() => removeFeedingEvent(event.id)}>
-                        <Trash2 className="w-4 h-4 text-sundown-red" />
-                      </Button>
+      {/* Selected day detail */}
+      <div className="border-t border-sundown-border pt-4 px-1 space-y-3">
+        <h3 className="text-2xl font-bold text-sundown-text">
+          {dayNum}
+          <span className="text-sm font-semibold text-sundown-muted ml-2">{dayName}</span>
+        </h3>
+
+        {loading ? (
+          <div className="flex items-center justify-center h-20">
+            <Loader2 className="w-5 h-5 animate-spin text-sundown-gold" />
+          </div>
+        ) : selectedEvents.length === 0 ? (
+          <p className="text-sm text-sundown-muted">No events for this day. Tap + to create one.</p>
+        ) : (
+          <div className="space-y-2">
+            {selectedEvents.map((event) => {
+              const color = calendarColorMap[event.calendar_id] || "#D4A843";
+              return (
+                <button
+                  key={event.id}
+                  onClick={() => openEditEvent(event)}
+                  className="w-full text-left rounded-xl border border-sundown-border bg-sundown-bg px-3 py-2 hover:border-sundown-gold/40 transition-colors"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="w-1 self-stretch rounded-full shrink-0 mt-0.5" style={{ backgroundColor: color }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sundown-text font-semibold truncate">{event.title}</p>
+                      <p className="text-xs text-sundown-muted">
+                        {formatEventTime(event)}
+                        {event.location ? ` · ${event.location}` : ""}
+                      </p>
+                      {event.repeat_rule && event.repeat_rule !== "none" && (
+                        <p className="text-xs text-sundown-muted">
+                          Repeats {event.repeat_rule}
+                          {(event.repeat_interval || 1) > 1 ? ` every ${event.repeat_interval}` : ""}
+                        </p>
+                      )}
                     </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* FAB */}
+      <button
+        onClick={() => {
+          setEditingEvent(null);
+          setShowEventModal(true);
+        }}
+        className="fixed bottom-8 right-8 h-14 w-14 rounded-full bg-sundown-gold text-black shadow-lg shadow-sundown-gold/30 hover:bg-sundown-gold-hover transition-colors flex items-center justify-center z-30"
+        aria-label="Add event"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
+
+      {/* Event modal */}
+      <EventModal
+        open={showEventModal}
+        onClose={() => { setShowEventModal(false); setEditingEvent(null); }}
+        onSaved={fetchData}
+        calendars={calendars}
+        defaultDate={date}
+        defaultCalendarId={defaultCalId}
+        editEvent={editingEvent}
+      />
     </div>
   );
 }
-

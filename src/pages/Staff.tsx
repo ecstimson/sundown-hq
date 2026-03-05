@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { UserPlus, Loader2, Users, X } from "lucide-react";
+import { UserPlus, Loader2, Users, X, CalendarDays } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { pinToAuthPassword } from "@/lib/pinAuth";
 import { useAuth } from "@/lib/auth";
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { Employee } from "@/types/database";
+import EventModal from "@/components/EventModal";
+import type { Employee, Calendar } from "@/types/database";
 
 type StaffMember = Employee & { auth_email?: string | null };
 
@@ -35,9 +36,20 @@ export default function Staff() {
     is_active: true,
   });
 
+  const [calendars, setCalendars] = useState<Calendar[]>([]);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [scheduleEmployee, setScheduleEmployee] = useState<StaffMember | null>(null);
+  const todayKey = new Date().toISOString().split("T")[0];
+
   useEffect(() => {
     void loadStaff(true);
+    void loadCalendars();
   }, []);
+
+  async function loadCalendars() {
+    const { data } = await supabase.from("calendars").select("*").order("name");
+    setCalendars((data as Calendar[]) || []);
+  }
 
   async function loadStaff(withLoading = false) {
     if (withLoading) setLoading(true);
@@ -55,7 +67,6 @@ export default function Staff() {
     );
     if (emailError) {
       const message = (emailError.message || "").toLowerCase();
-      // Graceful fallback when migration 005 has not been applied yet.
       const missingRpc =
         message.includes("could not find the function") ||
         message.includes("schema cache");
@@ -163,7 +174,6 @@ export default function Staff() {
       return;
     }
 
-    // Keep auth password in sync when user updates their own PIN.
     if (user?.id === editing.id) {
       const { error: authUpdateErr } = await supabase.auth.updateUser({
         password: pinToAuthPassword(nextPin),
@@ -181,6 +191,11 @@ export default function Staff() {
     await refreshStaff();
   }
 
+  function openScheduleForEmployee(member: StaffMember) {
+    setScheduleEmployee(member);
+    setShowEventModal(true);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -188,6 +203,8 @@ export default function Staff() {
       </div>
     );
   }
+
+  const defaultCalId = calendars[0]?.id || "";
 
   return (
     <div className="space-y-6">
@@ -255,10 +272,11 @@ export default function Staff() {
 
                 <div className="grid grid-cols-2 gap-2 mt-4">
                   <Button variant="outline" size="sm" className="w-full" onClick={() => openEdit(member)}>
-                    Profile
-                  </Button>
-                  <Button variant="ghost" size="sm" className="w-full text-sundown-muted hover:text-sundown-text" onClick={() => openEdit(member)}>
                     Edit
+                  </Button>
+                  <Button variant="outline" size="sm" className="w-full gap-1" onClick={() => openScheduleForEmployee(member)}>
+                    <CalendarDays className="h-3 w-3" />
+                    Schedule
                   </Button>
                 </div>
               </CardContent>
@@ -267,6 +285,7 @@ export default function Staff() {
         </div>
       )}
 
+      {/* Add employee modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/80 p-4 flex items-center justify-center">
           <div className="w-full max-w-lg rounded-xl border border-sundown-border bg-sundown-card">
@@ -339,6 +358,7 @@ export default function Staff() {
         </div>
       )}
 
+      {/* Edit employee modal */}
       {showEditModal && editing && (
         <div className="fixed inset-0 z-50 bg-black/80 p-4 flex items-center justify-center">
           <div className="w-full max-w-lg rounded-xl border border-sundown-border bg-sundown-card">
@@ -418,6 +438,17 @@ export default function Staff() {
           </div>
         </div>
       )}
+
+      {/* Schedule event for employee */}
+      <EventModal
+        open={showEventModal}
+        onClose={() => { setShowEventModal(false); setScheduleEmployee(null); }}
+        onSaved={() => {}}
+        calendars={calendars}
+        defaultDate={todayKey}
+        defaultCalendarId={defaultCalId}
+        editEvent={null}
+      />
     </div>
   );
 }
