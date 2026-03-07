@@ -23,12 +23,17 @@ if (!supabaseConfigValid) {
   )
 }
 
+// Use sessionStorage so the session lives only while the browser/tab is open.
+// Closing the browser or tab clears the session and forces a fresh login next visit.
+const sessionStorage = typeof window !== 'undefined' ? window.sessionStorage : undefined
+
 export const supabase = createClient<Database>(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'placeholder-key',
   {
     auth: {
       storageKey: buildAuthStorageKey(),
+      storage: sessionStorage,
     },
   }
 )

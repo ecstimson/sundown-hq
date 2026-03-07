@@ -25,10 +25,12 @@ export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isAdminMode = searchParams.get("mode") === "admin";
-  const { user, employee, signIn, signInWithPin, signOut } = useAuth();
+  const { user, employee, signIn, signInWithPin, signOut, loading: authLoading } = useAuth();
 
   // Employee PIN state
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [employeesError, setEmployeesError] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -51,32 +53,36 @@ export default function Login() {
   }
 
   // Fetch active employee names via secure RPC (no direct table access needed)
-  useEffect(() => {
-    if (!isAdminMode) {
-      if (!supabaseConfigValid) {
-        setError("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.");
-        return;
-      }
-      let cancelled = false;
-      (async () => {
-        let response: { data: unknown; error: { message: string } | null } =
-          await supabase.rpc("get_active_employee_names");
-        if (response.error && isAuthLockError(response.error.message)) {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          response = await supabase.rpc("get_active_employee_names");
-        }
-        if (cancelled) return;
-        if (response.error) {
-          console.error("Failed to load employee names:", response.error.message);
-          setError("Unable to load employee list. Check Supabase functions/migrations and API keys.");
-          return;
-        }
-        if (response.data) setEmployees(response.data as EmployeeOption[]);
-      })();
-      return () => {
-        cancelled = true;
-      };
+  async function loadEmployeeNames(attempt = 0) {
+    if (!supabaseConfigValid) {
+      setEmployeesError("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.");
+      return;
     }
+    setEmployeesLoading(true);
+    setEmployeesError(null);
+
+    const response: { data: unknown; error: { message: string } | null } =
+      await supabase.rpc("get_active_employee_names");
+
+    // Retry once on transient auth-lock / network errors (up to 2 attempts, 300ms backoff)
+    if (response.error && (isAuthLockError(response.error.message) || attempt === 0) && attempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+      return loadEmployeeNames(attempt + 1);
+    }
+
+    setEmployeesLoading(false);
+
+    if (response.error) {
+      console.error("Failed to load employee names:", response.error.message);
+      setEmployeesError("Could not load employee list. Tap to retry.");
+      return;
+    }
+    if (response.data) setEmployees(response.data as EmployeeOption[]);
+  }
+
+  useEffect(() => {
+    if (!isAdminMode) loadEmployeeNames();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdminMode]);
 
   const handleNumberClick = (num: number) => {
@@ -139,6 +145,17 @@ export default function Login() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  // Wait for auth to finish initializing before rendering any form or redirect.
+  // Without this guard the login form renders briefly then jumps to "already signed in"
+  // the moment the stored session resolves — interrupting mid-entry for the user.
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-sundown-bg">
+        <Loader2 className="w-8 h-8 animate-spin text-sundown-gold" />
+      </div>
+    );
   }
 
   if (isSignedIn) {
@@ -254,16 +271,30 @@ export default function Login() {
       {/* Employee Selector */}
       <div className="w-full mb-8 relative z-10">
         <button
-          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          onClick={() => {
+            if (employeesError) {
+              loadEmployeeNames();
+              return;
+            }
+            if (!employeesLoading) setIsDropdownOpen(!isDropdownOpen);
+          }}
           className="w-full h-14 bg-sundown-card border border-sundown-border rounded-xl px-4 flex items-center justify-between text-lg text-sundown-text focus:outline-none focus:border-sundown-gold transition-colors hover:border-sundown-gold"
         >
-          <span className={!selectedEmployee ? "text-sundown-muted" : "text-sundown-text font-bold"}>
-            {selectedEmployee || "Select Employee"}
-          </span>
-          <ChevronDown className={cn("w-5 h-5 text-sundown-muted transition-transform", isDropdownOpen && "rotate-180")} />
+          {employeesLoading ? (
+            <span className="flex items-center gap-2 text-sundown-muted">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading employees…
+            </span>
+          ) : employeesError ? (
+            <span className="text-sundown-red text-base font-medium">{employeesError}</span>
+          ) : (
+            <span className={!selectedEmployee ? "text-sundown-muted" : "text-sundown-text font-bold"}>
+              {selectedEmployee || "Select Employee"}
+            </span>
+          )}
+          <ChevronDown className={cn("w-5 h-5 text-sundown-muted transition-transform shrink-0", isDropdownOpen && "rotate-180")} />
         </button>
 
-        {isDropdownOpen && (
+        {isDropdownOpen && !employeesLoading && !employeesError && (
           <div className="absolute top-full left-0 right-0 mt-2 bg-sundown-card border border-sundown-border rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto ring-1 ring-black/5">
             {employees.length === 0 ? (
               <div className="px-4 py-3 text-sundown-muted text-center">No employees found</div>
