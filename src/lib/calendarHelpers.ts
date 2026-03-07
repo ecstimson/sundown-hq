@@ -1,7 +1,10 @@
 import type { CalendarEvent } from "@/types/database";
 
 export const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
-export const REPEAT_RULES = ["none", "daily", "weekly", "monthly", "yearly"] as const;
+export const WEEKDAY_LABELS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const WEEKDAY_LABELS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export const REPEAT_RULES = ["none", "daily", "weekly", "monthly", "yearly", "custom_weekdays"] as const;
 export type RepeatRule = (typeof REPEAT_RULES)[number];
 
 export const REMINDER_OPTIONS = [
@@ -76,6 +79,13 @@ export function eventOccursOnDate(event: CalendarEvent, dateKey: string): boolea
 
   if (rule === "daily") return diff % interval === 0;
   if (rule === "weekly") return diff % (7 * interval) === 0;
+
+  if (rule === "custom_weekdays") {
+    const weekdays: number[] = (event.repeat_weekdays as number[] | null) ?? [];
+    if (weekdays.length === 0) return false;
+    return weekdays.includes(target.getDay());
+  }
+
   if (rule === "yearly") {
     return (
       eventStartDate.getMonth() === target.getMonth() &&
@@ -101,6 +111,35 @@ export function formatEventTime(event: CalendarEvent): string {
   const fmt = (d: Date) =>
     d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   return `${fmt(start)} – ${fmt(end)}`;
+}
+
+export function formatRepeatRule(event: CalendarEvent): string {
+  const rule = (event.repeat_rule || "none") as RepeatRule;
+  if (rule === "none") return "";
+  if (rule === "custom_weekdays") {
+    const weekdays: number[] = (event.repeat_weekdays as number[] | null) ?? [];
+    if (weekdays.length === 0) return "Custom days";
+    const sorted = [...weekdays].sort((a, b) => a - b);
+    const names = sorted.map((d) => WEEKDAY_LABELS_SHORT[d]).join(", ");
+    return `Every ${names}`;
+  }
+  const interval = event.repeat_interval || 1;
+  if (interval > 1) {
+    const unitMap: Record<string, string> = {
+      daily: "days",
+      weekly: "weeks",
+      monthly: "months",
+      yearly: "years",
+    };
+    return `Every ${interval} ${unitMap[rule] ?? rule}`;
+  }
+  const labelMap: Record<string, string> = {
+    daily: "Daily",
+    weekly: "Weekly",
+    monthly: "Monthly",
+    yearly: "Yearly",
+  };
+  return labelMap[rule] ?? rule;
 }
 
 export function formatDateRange(event: CalendarEvent): string {

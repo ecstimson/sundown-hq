@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Loader2, X, Link2, Trash2, Plus, GripVertical } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
-import { REPEAT_RULES, REMINDER_OPTIONS, generateShareSlug } from "@/lib/calendarHelpers";
+import { REPEAT_RULES, REMINDER_OPTIONS, WEEKDAY_LABELS_SHORT, generateShareSlug } from "@/lib/calendarHelpers";
 import type { RepeatRule } from "@/lib/calendarHelpers";
 import type { Calendar, CalendarEvent, EventAttachment } from "@/types/database";
 
@@ -29,6 +29,7 @@ export type EventFormData = {
   repeat_rule: RepeatRule;
   repeat_interval: number;
   repeat_until: string;
+  repeat_weekdays: number[];
   reminder_minutes: number;
   share_slug: string;
   checklist_items: ChecklistItemData[];
@@ -48,6 +49,7 @@ function emptyForm(dateKey: string, defaultCalendarId: string): EventFormData {
     repeat_rule: "none",
     repeat_interval: 1,
     repeat_until: "",
+    repeat_weekdays: [],
     reminder_minutes: 0,
     share_slug: "",
     checklist_items: [],
@@ -74,6 +76,7 @@ function eventToForm(event: CalendarEvent): EventFormData {
     repeat_rule: (event.repeat_rule || "none") as RepeatRule,
     repeat_interval: event.repeat_interval || 1,
     repeat_until: event.repeat_until || "",
+    repeat_weekdays: (event.repeat_weekdays as number[] | null) ?? [],
     reminder_minutes: event.reminder_minutes?.length ? event.reminder_minutes[0] : 0,
     share_slug: event.share_slug || "",
     checklist_items: Array.isArray(event.checklist_items)
@@ -158,6 +161,7 @@ export default function EventModal({
       repeat_rule: form.repeat_rule,
       repeat_interval: form.repeat_interval,
       repeat_until: form.repeat_until || null,
+      repeat_weekdays: form.repeat_rule === "custom_weekdays" ? form.repeat_weekdays : null,
       reminder_minutes: form.reminder_minutes > 0 ? [form.reminder_minutes] : [],
       share_slug: form.share_slug || null,
       checklist_items: form.checklist_items.length > 0 ? form.checklist_items : null,
@@ -390,20 +394,33 @@ export default function EventModal({
           {/* Repeat */}
           <div>
             <label className="text-xs text-sundown-muted block mb-1">Repeat</label>
-            <div className="grid grid-cols-3 gap-3">
-              <select
-                value={form.repeat_rule}
-                onChange={(e) => setForm((p) => ({ ...p, repeat_rule: e.target.value as RepeatRule }))}
-                className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
-              >
-                <option value="none">Don't repeat</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
-              {form.repeat_rule !== "none" && (
-                <>
+            <div className="space-y-2">
+              <div className={`grid gap-3 ${form.repeat_rule !== "none" && form.repeat_rule !== "custom_weekdays" ? "grid-cols-3" : "grid-cols-2"}`}>
+                <select
+                  value={form.repeat_rule}
+                  onChange={(e) => {
+                    const rule = e.target.value as RepeatRule;
+                    setForm((p) => {
+                      const startDow = new Date(`${p.start_date}T00:00:00`).getDay();
+                      return {
+                        ...p,
+                        repeat_rule: rule,
+                        repeat_weekdays: rule === "custom_weekdays" && p.repeat_weekdays.length === 0
+                          ? [startDow]
+                          : p.repeat_weekdays,
+                      };
+                    });
+                  }}
+                  className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
+                >
+                  <option value="none">Don't repeat</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                  <option value="custom_weekdays">Custom days…</option>
+                </select>
+                {form.repeat_rule !== "none" && form.repeat_rule !== "custom_weekdays" && (
                   <input
                     type="number"
                     min={1}
@@ -414,6 +431,8 @@ export default function EventModal({
                     placeholder="Every"
                     className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
                   />
+                )}
+                {form.repeat_rule !== "none" && (
                   <input
                     type="date"
                     value={form.repeat_until}
@@ -421,7 +440,37 @@ export default function EventModal({
                     placeholder="Until"
                     className="h-10 px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
                   />
-                </>
+                )}
+              </div>
+
+              {/* Weekday chip picker */}
+              {form.repeat_rule === "custom_weekdays" && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {WEEKDAY_LABELS_SHORT.map((label, dow) => {
+                    const active = form.repeat_weekdays.includes(dow);
+                    return (
+                      <button
+                        key={dow}
+                        type="button"
+                        onClick={() =>
+                          setForm((p) => ({
+                            ...p,
+                            repeat_weekdays: active
+                              ? p.repeat_weekdays.filter((d) => d !== dow)
+                              : [...p.repeat_weekdays, dow],
+                          }))
+                        }
+                        className={`h-8 w-10 rounded-full text-xs font-semibold transition-colors ${
+                          active
+                            ? "bg-sundown-gold text-black"
+                            : "bg-sundown-border text-sundown-muted hover:text-sundown-text"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>

@@ -675,9 +675,10 @@ export interface Database {
           all_day: boolean
           start_at: string
           end_at: string
-          repeat_rule: string
+          repeat_rule: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom_weekdays'
           repeat_interval: number
           repeat_until: string | null
+          repeat_weekdays: number[] | null
           reminder_minutes: number[]
           share_slug: string | null
           checklist_items: Json | null
@@ -694,9 +695,10 @@ export interface Database {
           all_day?: boolean
           start_at: string
           end_at: string
-          repeat_rule?: string
+          repeat_rule?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom_weekdays'
           repeat_interval?: number
           repeat_until?: string | null
+          repeat_weekdays?: number[] | null
           reminder_minutes?: number[]
           share_slug?: string | null
           checklist_items?: Json | null
@@ -713,9 +715,10 @@ export interface Database {
           all_day?: boolean
           start_at?: string
           end_at?: string
-          repeat_rule?: string
+          repeat_rule?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom_weekdays'
           repeat_interval?: number
           repeat_until?: string | null
+          repeat_weekdays?: number[] | null
           reminder_minutes?: number[]
           share_slug?: string | null
           checklist_items?: Json | null

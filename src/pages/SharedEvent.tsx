@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Loader2, CalendarDays, MapPin, Clock, Repeat, ArrowLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { formatEventTime, formatDateRange } from "@/lib/calendarHelpers";
+import { formatEventTime, formatDateRange, formatRepeatRule } from "@/lib/calendarHelpers";
 import type { CalendarEvent, Calendar } from "@/types/database";
 
 export default function SharedEvent() {
@@ -107,10 +107,7 @@ export default function SharedEvent() {
           {event.repeat_rule && event.repeat_rule !== "none" && (
             <div className="flex items-center gap-2">
               <Repeat className="w-4 h-4 text-sundown-gold" />
-              <span>
-                Repeats {event.repeat_rule}
-                {(event.repeat_interval || 1) > 1 ? ` every ${event.repeat_interval}` : ""}
-              </span>
+              <span>{formatRepeatRule(event)}</span>
             </div>
           )}
         </div>

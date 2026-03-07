@@ -11,6 +11,7 @@ import {
   getMonthGrid,
   eventOccursOnDate,
   formatEventTime,
+  formatRepeatRule,
 } from "@/lib/calendarHelpers";
 import type { Calendar, CalendarEvent } from "@/types/database";
 
@@ -60,8 +61,12 @@ export default function EmployeeSchedule() {
       supabase
         .from("calendar_events")
         .select("*")
-        .lte("start_at", `${monthEnd}T23:59:59`)
-        .gte("end_at", `${monthStart}T00:00:00`)
+        .or(
+          // Non-recurring or multi-day: overlap the visible month window
+          `and(start_at.lte.${monthEnd}T23:59:59,end_at.gte.${monthStart}T00:00:00),` +
+          // Recurring templates: started on or before month end and not yet expired
+          `and(repeat_rule.neq.none,start_at.lte.${monthEnd}T23:59:59,or(repeat_until.is.null,repeat_until.gte.${monthStart}))`
+        )
         .order("start_at"),
     ]);
 
