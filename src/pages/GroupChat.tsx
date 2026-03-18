@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Send, Loader2, RefreshCw } from "lucide-react";
+import { Send, Loader2, RefreshCw, WifiOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import type { ChatMessage } from "@/types/database";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 export default function GroupChat() {
   const { employee } = useAuth();
@@ -13,17 +14,18 @@ export default function GroupChat() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   const canSend = useMemo(
     () => Boolean(employee && draft.trim().length > 0 && !sending),
     [employee, draft, sending]
   );
 
-  async function fetchMessages() {
+  const fetchMessages = useCallback(async () => {
     setLoading(true);
     setError(null);
-    // Fetch the most recent 200 messages by ordering descending then reversing for display
     const { data, error: fetchErr } = await supabase
       .from("chat_messages")
       .select("*")
@@ -35,10 +37,9 @@ export default function GroupChat() {
       setLoading(false);
       return;
     }
-    // Reverse so oldest-first display order is correct
     setMessages(((data as ChatMessage[]) || []).reverse());
     setLoading(false);
-  }
+  }, []);
 
   useEffect(() => {
     fetchMessages();
@@ -47,17 +48,28 @@ export default function GroupChat() {
       .channel("group-chat")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (payload) => {
         const incoming = payload.new as ChatMessage;
-        // Deduplicate: drop if this ID was already appended optimistically
         setMessages((prev) =>
           prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]
         );
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === "SUBSCRIBED") {
+          setRealtimeConnected(true);
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setRealtimeConnected(false);
+          console.error("Realtime subscription error:", err);
+        } else if (status === "CLOSED") {
+          setRealtimeConnected(false);
+        }
+      });
+
+    channelRef.current = channel;
 
     return () => {
       supabase.removeChannel(channel);
+      channelRef.current = null;
     };
-  }, []);
+  }, [fetchMessages]);
 
   useEffect(() => {
     if (!listRef.current) return;
@@ -100,7 +112,14 @@ export default function GroupChat() {
       <Card className="h-full flex flex-col rounded-none">
         <CardHeader className="border-b border-sundown-border">
           <div className="flex items-center justify-between">
-            <CardTitle>Group Chat</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle>Group Chat</CardTitle>
+              {!loading && !realtimeConnected && (
+                <span className="flex items-center gap-1 text-xs text-sundown-muted" title="Live updates unavailable — use refresh">
+                  <WifiOff className="w-3 h-3" />
+                </span>
+              )}
+            </div>
             {!loading && (
               <button
                 onClick={fetchMessages}

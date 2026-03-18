@@ -5,6 +5,7 @@ import { UserPlus, Loader2, Users, X, CalendarDays } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { pinToAuthPassword } from "@/lib/pinAuth";
 import { useAuth } from "@/lib/auth";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { EmptyState } from "@/components/ui/EmptyState";
 import EventModal from "@/components/EventModal";
 import type { Employee, Calendar, EmployeeTimeEntry } from "@/types/database";
@@ -123,27 +124,19 @@ export default function Staff() {
     setSaving(true);
     setFetchError(null);
 
-    const authEmail = addForm.email.trim().toLowerCase();
-    const { data: authData, error: authErr } = await supabase.auth.signUp({
-      email: authEmail,
-      password: pinToAuthPassword(addForm.pin.trim()),
-    });
-    if (authErr || !authData.user?.id) {
-      setFetchError(authErr?.message || "Auth account creation failed. Check Supabase auth settings.");
-      setSaving(false);
-      return;
-    }
+    const { error: rpcErr } = await (supabase.rpc as any)(
+      "admin_create_employee",
+      {
+        p_name: addForm.name.trim(),
+        p_email: addForm.email.trim().toLowerCase(),
+        p_pin: addForm.pin.trim(),
+        p_role: addForm.role,
+        p_assigned_buildings: addForm.assigned_buildings,
+      }
+    ) as { data: string | null; error: PostgrestError | null };
 
-    const { error: insertErr } = await supabase.from("employees").insert({
-      id: authData.user.id,
-      name: addForm.name.trim(),
-      pin: addForm.pin.trim(),
-      role: addForm.role,
-      assigned_buildings: addForm.assigned_buildings,
-      is_active: true,
-    } as any);
-    if (insertErr) {
-      setFetchError(insertErr.message);
+    if (rpcErr) {
+      setFetchError(rpcErr.message);
       setSaving(false);
       return;
     }
