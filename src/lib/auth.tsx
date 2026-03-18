@@ -38,11 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         'Session check timed out. Refresh and try again.'
       )
     )
-      .then(({ data: { session } }) => {
+      .then(async ({ data: { session } }) => {
         setSession(session)
         setUser(session?.user ?? null)
         if (session?.user) {
-          fetchEmployee(session.user)
+          await fetchEmployee(session.user)
         } else {
           setLoading(false)
         }
@@ -55,12 +55,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setSession(session)
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          await fetchEmployee(session.user)
-        } else {
-          setEmployee(null)
+        try {
+          setSession(session)
+          setUser(session?.user ?? null)
+          if (session?.user) {
+            await fetchEmployee(session.user)
+          } else {
+            setEmployee(null)
+            setLoading(false)
+          }
+        } catch (err) {
+          console.error('Auth state change error:', err)
+          setEmployeeError(err instanceof Error ? err.message : 'Auth state update failed')
           setLoading(false)
         }
       }
@@ -129,7 +135,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setEmployeeError('No employee profile found for this account. Ask an admin to finish account setup.')
     }
     setEmployee(null)
-    await supabase.auth.signOut()
+    try {
+      await supabase.auth.signOut()
+    } catch (err) {
+      console.error('signOut during fetchEmployee cleanup failed:', err)
+    }
     setSession(null)
     setUser(null)
     setLoading(false)
@@ -204,8 +214,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     const { error } = await supabase.auth.signOut()
-    if (error) throw error
     setEmployee(null)
+    setSession(null)
+    setUser(null)
+    if (error) throw error
   }
 
   return (

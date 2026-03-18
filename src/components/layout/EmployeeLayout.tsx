@@ -101,7 +101,11 @@ export default function EmployeeLayout() {
   }
 
   async function handleSignOut() {
-    await signOut();
+    try {
+      await signOut();
+    } catch (err) {
+      console.error('Sign out failed:', err);
+    }
     navigate("/login");
   }
 

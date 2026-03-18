@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { supabaseConfigValid } from './lib/supabase';
 import { AuthProvider } from './lib/auth';
+import ErrorBoundary from './components/ErrorBoundary';
 import App from './App.tsx';
 import './index.css';
 
@@ -31,7 +32,9 @@ function MissingConfig() {
 createRoot(document.getElementById('root')!).render(
   supabaseConfigValid ? (
     <AuthProvider>
-      <App />
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
     </AuthProvider>
   ) : (
     <MissingConfig />

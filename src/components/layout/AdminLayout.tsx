@@ -73,7 +73,11 @@ export default function AdminLayout() {
   }, [drawerOpen]);
 
   const handleSignOut = async () => {
-    await signOut();
+    try {
+      await signOut();
+    } catch (err) {
+      console.error('Sign out failed:', err);
+    }
     navigate("/login");
   };
 
