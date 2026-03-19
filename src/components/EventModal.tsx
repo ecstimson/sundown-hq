@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { Loader2, X, Link2, Trash2, Plus, GripVertical } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -22,6 +22,9 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+
+const DRAFT_KEY = "sundown-draft-event";
+const DRAFT_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 export interface ChecklistItemData {
   id: number;
@@ -171,6 +174,11 @@ export default function EventModal({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [newItemLabel, setNewItemLabel] = useState("");
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<EventFormData | null>(null);
+  const isNewEvent = !editEvent;
+  // Track whether draft saving is active (only for new events while modal is open)
+  const draftActiveRef = useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -194,17 +202,55 @@ export default function EventModal({
   }
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      draftActiveRef.current = false;
+      return;
+    }
     if (editEvent) {
+      draftActiveRef.current = false;
+      setShowDraftBanner(false);
       setForm(eventToForm(editEvent));
       loadAttachments(editEvent.id);
     } else {
-      setForm(emptyForm(defaultDate, defaultCalendarId));
+      // Check for a saved draft
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const { savedAt, data } = JSON.parse(raw) as { savedAt: number; data: EventFormData };
+          if (Date.now() - savedAt < DRAFT_MAX_AGE_MS) {
+            setPendingDraft(data);
+            setShowDraftBanner(true);
+            setForm(emptyForm(defaultDate, defaultCalendarId));
+          } else {
+            localStorage.removeItem(DRAFT_KEY);
+            setForm(emptyForm(defaultDate, defaultCalendarId));
+          }
+        } else {
+          setForm(emptyForm(defaultDate, defaultCalendarId));
+        }
+      } catch {
+        setForm(emptyForm(defaultDate, defaultCalendarId));
+      }
+      draftActiveRef.current = true;
       setAttachments([]);
     }
     setError(null);
     setCopied(false);
   }, [open, editEvent, defaultDate, defaultCalendarId]);
+
+  // Auto-save draft every 5 seconds for new events
+  useEffect(() => {
+    if (!open || !isNewEvent) return;
+    const interval = setInterval(() => {
+      if (!draftActiveRef.current) return;
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), data: form }));
+      } catch {
+        // Ignore storage quota errors
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [open, isNewEvent, form]);
 
   async function loadAttachments(eventId: string) {
     const { data } = await supabase
@@ -268,6 +314,7 @@ export default function EventModal({
       setError(insertError.message);
       return;
     }
+    if (isNewEvent) localStorage.removeItem(DRAFT_KEY);
     onSaved();
     onClose();
   }
@@ -357,6 +404,36 @@ export default function EventModal({
         </div>
 
         <div className="p-5 space-y-4">
+          {showDraftBanner && (
+            <div className="rounded-md border border-sundown-gold/40 bg-sundown-gold/10 p-3 flex items-center justify-between gap-3">
+              <span className="text-sm text-sundown-text">Resume draft?</span>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (pendingDraft) setForm(pendingDraft);
+                    setPendingDraft(null);
+                    setShowDraftBanner(false);
+                  }}
+                  className="px-3 py-1 rounded text-xs font-semibold bg-sundown-gold text-black hover:opacity-90 transition-opacity"
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem(DRAFT_KEY);
+                    setPendingDraft(null);
+                    setShowDraftBanner(false);
+                  }}
+                  className="px-3 py-1 rounded text-xs font-semibold bg-sundown-border text-sundown-muted hover:text-sundown-text transition-colors"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-md border border-sundown-red/30 bg-sundown-red/10 p-3 text-sm text-sundown-red">
               {error}

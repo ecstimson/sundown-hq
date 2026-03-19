@@ -183,6 +183,7 @@ export default function Login() {
                 setError("");
                 try {
                   await signOut();
+                  navigate("/login", { replace: true });
                 } catch (err) {
                   const message = err instanceof Error ? err.message : "Sign out failed.";
                   setError(message);
