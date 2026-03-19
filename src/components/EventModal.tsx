@@ -6,6 +6,22 @@ import { useAuth } from "@/lib/auth";
 import { REPEAT_RULES, REMINDER_OPTIONS, WEEKDAY_LABELS_SHORT, generateShareSlug } from "@/lib/calendarHelpers";
 import type { RepeatRule } from "@/lib/calendarHelpers";
 import type { Calendar, CalendarEvent, EventAttachment } from "@/types/database";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 export interface ChecklistItemData {
   id: number;
@@ -13,6 +29,50 @@ export interface ChecklistItemData {
   completed: boolean;
   completed_by?: string;
   completed_at?: string;
+}
+
+interface SortableChecklistItemProps {
+  item: ChecklistItemData;
+  onRemove: () => void;
+}
+
+const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, onRemove }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 group"
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="touch-none cursor-grab active:cursor-grabbing p-0.5 text-sundown-muted/40 hover:text-sundown-muted transition-colors"
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="w-3 h-3" />
+      </button>
+      <span className="text-sm text-sundown-text flex-1">{item.label}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="opacity-0 group-hover:opacity-100 p-1 text-sundown-muted hover:text-sundown-red transition-opacity"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </div>
+  );
 }
 
 export type EventFormData = {
@@ -111,6 +171,27 @@ export default function EventModal({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [newItemLabel, setNewItemLabel] = useState("");
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      // Require the pointer to move 5px before activating — prevents accidental drags when tapping buttons
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 5 },
+    })
+  );
+
+  function handleChecklistDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setForm((prev) => {
+      const oldIndex = prev.checklist_items.findIndex((item) => item.id === active.id);
+      const newIndex = prev.checklist_items.findIndex((item) => item.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return { ...prev, checklist_items: arrayMove(prev.checklist_items, oldIndex, newIndex) };
+    });
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -507,25 +588,31 @@ export default function EventModal({
           <div>
             <label className="text-xs text-sundown-muted block mb-1">Checklist Items</label>
             {form.checklist_items.length > 0 && (
-              <div className="space-y-1 mb-2">
-                {form.checklist_items.map((item, idx) => (
-                  <div key={item.id} className="flex items-center gap-2 group">
-                    <GripVertical className="w-3 h-3 text-sundown-muted/40" />
-                    <span className="text-sm text-sundown-text flex-1">{item.label}</span>
-                    <button
-                      onClick={() =>
-                        setForm((p) => ({
-                          ...p,
-                          checklist_items: p.checklist_items.filter((_, i) => i !== idx),
-                        }))
-                      }
-                      className="opacity-0 group-hover:opacity-100 p-1 text-sundown-muted hover:text-sundown-red transition-opacity"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleChecklistDragEnd}
+              >
+                <SortableContext
+                  items={form.checklist_items.map((item) => item.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-1 mb-2">
+                    {form.checklist_items.map((item, idx) => (
+                      <SortableChecklistItem
+                        key={item.id}
+                        item={item}
+                        onRemove={() =>
+                          setForm((p) => ({
+                            ...p,
+                            checklist_items: p.checklist_items.filter((_, i) => i !== idx),
+                          }))
+                        }
+                      />
+                    ))}
                   </div>
-                ))}
-              </div>
+                </SortableContext>
+              </DndContext>
             )}
             <div className="flex gap-2">
               <input
