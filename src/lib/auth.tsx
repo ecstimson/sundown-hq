@@ -28,9 +28,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [employeeNotFound, setEmployeeNotFound] = useState(false)
 
   const initialized = useRef(false)
-  // Keep a ref to the current user so retryFetchEmployee always sees the latest value
+  // Keep refs to the current user/employee so async callbacks always see the latest values
   const userRef = useRef<User | null>(null)
   userRef.current = user
+  const employeeRef = useRef<Employee | null>(null)
+  employeeRef.current = employee
 
   useEffect(() => {
     // Guard against double-init (React StrictMode or fast remounts)
@@ -149,18 +151,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 data: Employee | null
                 error: { message: string; code?: string } | null
               }>,
-            10000,
+            15000,
             'Profile lookup timed out. Please try logging in again.'
           )
         )
         data = response.data
         error = response.error
       } catch (err) {
-        // Network error or timeout — retry if attempts remain
         if (attempt < MAX_RETRIES - 1) continue
-        // All retries exhausted — surface the error without signing out
         const message = err instanceof Error ? err.message : 'Profile lookup failed'
         console.error('Employee profile fetch failed after retries (network/timeout):', message)
+        if (silent && employeeRef.current) {
+          // Background refresh failed but we already have a valid session — keep it.
+          return
+        }
         setEmployeeError(message)
         setEmployee(null)
         if (!silent) setLoading(false)
@@ -188,17 +192,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (error) {
-        // Other Supabase error (RLS hiccup, unexpected failure) — retry if attempts remain
         if (attempt < MAX_RETRIES - 1) continue
-        // All retries exhausted
         console.error('Failed to load employee profile after retries:', error.message)
+        if (silent && employeeRef.current) return
         setEmployeeError(error.message)
         setEmployee(null)
         if (!silent) setLoading(false)
         return
       }
 
-      // !error && !data — .single() should always give one or the other, but handle defensively
+      // .single() should always give one or the other, but handle defensively
+      if (silent && employeeRef.current) return
       setEmployeeError('Employee profile unexpectedly empty.')
       setEmployee(null)
       if (!silent) setLoading(false)

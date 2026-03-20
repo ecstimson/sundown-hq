@@ -205,6 +205,7 @@ export interface Database {
           completed_at: string | null
           items: Json
           notes: string | null
+          template_id: string | null
           created_at: string
         }
         Insert: {
@@ -217,6 +218,7 @@ export interface Database {
           completed_at?: string | null
           items?: Json
           notes?: string | null
+          template_id?: string | null
           created_at?: string
         }
         Update: {
@@ -229,6 +231,7 @@ export interface Database {
           completed_at?: string | null
           items?: Json
           notes?: string | null
+          template_id?: string | null
           created_at?: string
         }
       }
@@ -586,6 +589,8 @@ export interface Database {
           checklist_type: string
           items: Json
           is_active: boolean
+          repeat_rule: 'daily' | 'custom_weekdays'
+          repeat_weekdays: number[] | null
           created_by: string | null
           created_at: string
           updated_at: string
@@ -597,6 +602,8 @@ export interface Database {
           checklist_type: string
           items?: Json
           is_active?: boolean
+          repeat_rule?: 'daily' | 'custom_weekdays'
+          repeat_weekdays?: number[] | null
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -608,6 +615,8 @@ export interface Database {
           checklist_type?: string
           items?: Json
           is_active?: boolean
+          repeat_rule?: 'daily' | 'custom_weekdays'
+          repeat_weekdays?: number[] | null
           created_by?: string | null
           created_at?: string
           updated_at?: string

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { ArrowLeft, CheckCircle, Circle, Loader2, ClipboardList } from "lucide-react";
@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { DailyChecklist } from "@/types/database";
+import type { DailyChecklist, ChecklistTemplate } from "@/types/database";
 
 interface ChecklistItem {
   id: number;
@@ -24,14 +24,19 @@ export default function Checklists() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const generatedRef = useRef(false);
 
   const today = new Date().toISOString().split("T")[0];
+  const todayWeekday = new Date().getDay();
   const building = employee?.assigned_buildings?.[0] || "A";
 
   useEffect(() => {
-    async function fetchChecklist() {
+    generatedRef.current = false;
+
+    async function fetchAndGenerate() {
       setLoading(true);
       setError(null);
+
       const { data, error: fetchErr } = await supabase
         .from("daily_checklists")
         .select("*")
@@ -39,11 +44,69 @@ export default function Checklists() {
         .eq("building", building)
         .order("created_at", { ascending: true });
 
-      if (fetchErr) setError(fetchErr.message);
-      setChecklists((data as DailyChecklist[]) || []);
+      if (fetchErr) { setError(fetchErr.message); setChecklists([]); setLoading(false); return; }
+
+      let rows = (data as DailyChecklist[]) || [];
+
+      // Auto-generate from templates (once per mount)
+      if (!generatedRef.current && employee) {
+        generatedRef.current = true;
+        const { data: tplData } = await supabase
+          .from("checklist_templates")
+          .select("*")
+          .eq("building", building)
+          .eq("is_active", true);
+
+        const templates = (tplData as ChecklistTemplate[]) || [];
+        const existingTypes = new Set(rows.map((r) => r.checklist_type));
+
+        for (const tpl of templates) {
+          if (existingTypes.has(tpl.checklist_type as any)) continue;
+
+          const matches =
+            tpl.repeat_rule === "daily" ||
+            (tpl.repeat_rule === "custom_weekdays" &&
+              Array.isArray(tpl.repeat_weekdays) &&
+              tpl.repeat_weekdays.includes(todayWeekday));
+          if (!matches) continue;
+
+          const tplItems = Array.isArray(tpl.items) ? (tpl.items as any[]) : [];
+          const items = tplItems.map((it: any, idx: number) => ({
+            id: idx + 1,
+            label: it.label || "",
+            completed: false,
+            time: "",
+            user: "",
+            value: "",
+          }));
+
+          try {
+            const { data: inserted } = await (supabase.from("daily_checklists") as any)
+              .insert({
+                date: today,
+                building: tpl.building,
+                checklist_type: tpl.checklist_type,
+                employee_id: employee.id,
+                employee_name: employee.name,
+                completed_at: null,
+                notes: `title: ${tpl.title}`,
+                template_id: tpl.id,
+                items: items as any,
+              } as any)
+              .select()
+              .single();
+
+            if (inserted) rows = [...rows, inserted as DailyChecklist];
+          } catch {
+            // Unique constraint violation — another employee already generated this row
+          }
+        }
+      }
+
+      setChecklists(rows);
       setLoading(false);
     }
-    fetchChecklist();
+    fetchAndGenerate();
 
     const channel = supabase
       .channel(`checklists-employee-${building}-${today}`)
