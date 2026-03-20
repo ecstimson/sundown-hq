@@ -153,18 +153,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 10000)
 
-        const response = await (supabase
-          .from('employees')
-          .select('*')
-          .eq('id', authUser.id)
-          .abortSignal(controller.signal)
-          .single() as unknown as Promise<{
-            data: Employee | null
-            error: { message: string; code?: string } | null
-          }>).finally(() => clearTimeout(timeoutId))
+        try {
+          const response = await (supabase
+            .from('employees')
+            .select('*')
+            .eq('id', authUser.id)
+            .abortSignal(controller.signal)
+            .single() as unknown as Promise<{
+              data: Employee | null
+              error: { message: string; code?: string } | null
+            }>)
 
-        data = response.data
-        error = response.error
+          data = response.data
+          error = response.error
+        } finally {
+          clearTimeout(timeoutId)
+        }
       } catch (err) {
         if (attempt < MAX_RETRIES - 1) continue
         const message = err instanceof Error ? err.message : 'Profile lookup failed'
