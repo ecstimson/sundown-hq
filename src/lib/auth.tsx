@@ -28,7 +28,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [employeeNotFound, setEmployeeNotFound] = useState(false)
 
   const initialized = useRef(false)
-  // Keep refs to the current user/employee so async callbacks always see the latest values
   const userRef = useRef<User | null>(null)
   userRef.current = user
   const employeeRef = useRef<Employee | null>(null)
@@ -74,8 +73,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSession(session)
           setUser(session?.user ?? null)
           if (session?.user) {
+            if (event === 'INITIAL_SESSION') {
+              // initSession() already handles the first fetch — skip duplicate
+              return
+            }
             if (event === 'TOKEN_REFRESHED') {
-              // Background re-fetch — don't flip loading state to avoid a spinner flash
               fetchEmployee(session.user, true).catch((err) =>
                 console.error('Background employee refresh on TOKEN_REFRESHED failed:', err)
               )
@@ -148,30 +150,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let error: { message: string; code?: string } | null = null
 
       try {
-        const response = await withAuthLockRetry(() =>
-          withTimeout(
-            supabase
-              .from('employees')
-              .select('*')
-              .eq('id', authUser.id)
-              .single() as unknown as Promise<{
-                data: Employee | null
-                error: { message: string; code?: string } | null
-              }>,
-            15000,
-            'Profile lookup timed out. Please try logging in again.'
-          )
-        )
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000)
+
+        const response = await (supabase
+          .from('employees')
+          .select('*')
+          .eq('id', authUser.id)
+          .abortSignal(controller.signal)
+          .single() as unknown as Promise<{
+            data: Employee | null
+            error: { message: string; code?: string } | null
+          }>).finally(() => clearTimeout(timeoutId))
+
         data = response.data
         error = response.error
       } catch (err) {
         if (attempt < MAX_RETRIES - 1) continue
         const message = err instanceof Error ? err.message : 'Profile lookup failed'
-        console.error('Employee profile fetch failed after retries (network/timeout):', message)
-        if (silent && employeeRef.current) {
-          // Background refresh failed but we already have a valid session — keep it.
-          return
-        }
+        console.error(`Employee profile fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}):`, message)
+        if (silent && employeeRef.current) return
         setEmployeeError(message)
         setEmployee(null)
         if (!silent) setLoading(false)
@@ -187,7 +185,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (error?.code === 'PGRST116') {
-        // No rows found — the employee record genuinely doesn't exist
         console.error('No employee profile found for user:', authUser.id)
         setEmployeeError(
           'No employee profile found for this account. Ask an admin to finish account setup.'
@@ -200,7 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         if (attempt < MAX_RETRIES - 1) continue
-        console.error('Failed to load employee profile after retries:', error.message)
+        console.error(`Failed to load employee profile (attempt ${attempt + 1}/${MAX_RETRIES}):`, error.message, error.code ?? '')
         if (silent && employeeRef.current) return
         setEmployeeError(error.message)
         setEmployee(null)
@@ -208,7 +205,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      // .single() should always give one or the other, but handle defensively
       if (silent && employeeRef.current) return
       setEmployeeError('Employee profile unexpectedly empty.')
       setEmployee(null)
