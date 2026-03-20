@@ -74,6 +74,7 @@ function EditableItemRow({
   onSave,
   onRemove,
 }: {
+  key?: React.Key;
   item: ChecklistItem;
   onSave: (newLabel: string) => void;
   onRemove: () => void;
