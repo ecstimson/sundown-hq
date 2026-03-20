@@ -34,32 +34,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const employeeRef = useRef<Employee | null>(null)
   employeeRef.current = employee
 
+  async function initSession(attempt = 0): Promise<void> {
+    const MAX_ATTEMPTS = 3
+    const RETRY_DELAY = 2000
+    try {
+      const { data: { session } } = await withAuthLockRetry(() =>
+        withTimeout(supabase.auth.getSession(), 20000, 'Session check timed out')
+      )
+      setSession(session)
+      setUser(session?.user ?? null)
+      if (session?.user) {
+        await fetchEmployee(session.user)
+      } else {
+        setLoading(false)
+      }
+    } catch (err) {
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY))
+        return initSession(attempt + 1)
+      }
+      console.error('Failed to initialize auth session after retries:', err)
+      try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* noop */ }
+      setSession(null)
+      setUser(null)
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     // Guard against double-init (React StrictMode or fast remounts)
     if (initialized.current) return
     initialized.current = true
 
-    withAuthLockRetry(() =>
-      withTimeout(
-        supabase.auth.getSession(),
-        10000,
-        'Session check timed out. Refresh and try again.'
-      )
-    )
-      .then(async ({ data: { session } }) => {
-        setSession(session)
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          await fetchEmployee(session.user)
-        } else {
-          setLoading(false)
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to initialize auth session:', err)
-        setEmployeeError(err instanceof Error ? err.message : 'Failed to initialize auth')
-        setLoading(false)
-      })
+    initSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {

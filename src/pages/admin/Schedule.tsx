@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
-import { ChevronLeft, ChevronRight, Loader2, CirclePlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, CirclePlus, ClipboardList, CheckCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import EventModal from "@/components/EventModal";
@@ -12,14 +13,16 @@ import {
   formatEventTime,
   formatRepeatRule,
 } from "@/lib/calendarHelpers";
-import type { Calendar, CalendarEvent } from "@/types/database";
+import type { Calendar, CalendarEvent, DailyChecklist } from "@/types/database";
 
 export default function AdminSchedule() {
   const { employee } = useAuth();
+  const navigate = useNavigate();
   const todayKey = new Date().toISOString().split("T")[0];
   const [date, setDate] = useState(todayKey);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [checklists, setChecklists] = useState<DailyChecklist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showEventModal, setShowEventModal] = useState(false);
@@ -55,18 +58,22 @@ export default function AdminSchedule() {
   async function fetchData() {
     setLoading(true);
     setError(null);
-    const [{ data: cals, error: calErr }, { data: evts, error: evtErr }] = await Promise.all([
+    const [{ data: cals, error: calErr }, { data: evts, error: evtErr }, { data: cls }] = await Promise.all([
       supabase.from("calendars").select("*").order("name"),
       supabase
         .from("calendar_events")
         .select("*")
         .or(
-          // Non-recurring or multi-day: overlap the visible month window
           `and(start_at.lte.${monthEnd}T23:59:59,end_at.gte.${monthStart}T00:00:00),` +
-          // Recurring templates: started on or before month end and not yet expired
           `and(repeat_rule.neq.none,start_at.lte.${monthEnd}T23:59:59,or(repeat_until.is.null,repeat_until.gte.${monthStart}))`
         )
         .order("start_at"),
+      supabase
+        .from("daily_checklists")
+        .select("id, date, checklist_type, building, completed_at, items, notes")
+        .gte("date", monthStart)
+        .lte("date", monthEnd)
+        .order("created_at"),
     ]);
 
     if (calErr || evtErr) {
@@ -74,6 +81,7 @@ export default function AdminSchedule() {
     }
     setCalendars((cals as Calendar[]) || []);
     setEvents((evts as CalendarEvent[]) || []);
+    setChecklists((cls as DailyChecklist[]) || []);
     setLoading(false);
   }
 
@@ -94,6 +102,19 @@ export default function AdminSchedule() {
         .filter((e) => eventOccursOnDate(e, date))
         .sort((a, b) => a.start_at.localeCompare(b.start_at)),
     [events, date]
+  );
+
+  const checklistActivity = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const cl of checklists) {
+      map[cl.date] = (map[cl.date] || 0) + 1;
+    }
+    return map;
+  }, [checklists]);
+
+  const selectedChecklists = useMemo(
+    () => checklists.filter((cl) => cl.date === date),
+    [checklists, date]
   );
 
   const calendarColorMap = useMemo(() => {
@@ -168,7 +189,8 @@ export default function AdminSchedule() {
               const dayKey = toDateKey(calYear, calMonth, day);
               const isSelected = dayKey === date;
               const isToday = dayKey === todayKey;
-              const count = monthActivity[dayKey] || 0;
+              const evtCount = monthActivity[dayKey] || 0;
+              const clCount = checklistActivity[dayKey] || 0;
               return (
                 <button
                   key={dayKey}
@@ -186,11 +208,14 @@ export default function AdminSchedule() {
                   >
                     {day}
                   </span>
-                  {count > 0 && (
+                  {(evtCount > 0 || clCount > 0) && (
                     <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-0.5">
-                      {Array.from({ length: Math.min(count, 3) }).map((_, j) => (
-                        <span key={j} className="w-1 h-1 rounded-full bg-sundown-gold" />
+                      {Array.from({ length: Math.min(evtCount, 3) }).map((_, j) => (
+                        <span key={`e${j}`} className="w-1 h-1 rounded-full bg-sundown-gold" />
                       ))}
+                      {clCount > 0 && (
+                        <span className="w-1 h-1 rounded-full bg-sundown-green" />
+                      )}
                     </span>
                   )}
                 </button>
@@ -211,37 +236,80 @@ export default function AdminSchedule() {
           <div className="flex items-center justify-center h-20">
             <Loader2 className="w-5 h-5 animate-spin text-sundown-gold" />
           </div>
-        ) : selectedEvents.length === 0 ? (
+        ) : selectedEvents.length === 0 && selectedChecklists.length === 0 ? (
           <p className="text-sm text-sundown-muted">No events for this day. Tap + to create one.</p>
         ) : (
-          <div className="space-y-2">
-            {selectedEvents.map((event) => {
-              const color = calendarColorMap[event.calendar_id] || "#D4A843";
-              return (
-                <button
-                  key={event.id}
-                  onClick={() => openEditEvent(event)}
-                  className="w-full text-left rounded-xl border border-sundown-border bg-sundown-bg px-3 py-2 hover:border-sundown-gold/40 transition-colors"
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="w-1 self-stretch rounded-full shrink-0 mt-0.5" style={{ backgroundColor: color }} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sundown-text font-semibold truncate">{event.title}</p>
-                      <p className="text-xs text-sundown-muted">
-                        {formatEventTime(event)}
-                        {event.location ? ` · ${event.location}` : ""}
-                      </p>
-                      {event.repeat_rule && event.repeat_rule !== "none" && (
-                        <p className="text-xs text-sundown-muted">
-                          {formatRepeatRule(event)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <>
+            {selectedEvents.length > 0 && (
+              <div className="space-y-2">
+                {selectedEvents.map((event) => {
+                  const color = calendarColorMap[event.calendar_id] || "#D4A843";
+                  return (
+                    <button
+                      key={event.id}
+                      onClick={() => openEditEvent(event)}
+                      className="w-full text-left rounded-xl border border-sundown-border bg-sundown-bg px-3 py-2 hover:border-sundown-gold/40 transition-colors"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="w-1 self-stretch rounded-full shrink-0 mt-0.5" style={{ backgroundColor: color }} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sundown-text font-semibold truncate">{event.title}</p>
+                          <p className="text-xs text-sundown-muted">
+                            {formatEventTime(event)}
+                            {event.location ? ` · ${event.location}` : ""}
+                          </p>
+                          {event.repeat_rule && event.repeat_rule !== "none" && (
+                            <p className="text-xs text-sundown-muted">
+                              {formatRepeatRule(event)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {selectedChecklists.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-sundown-muted uppercase tracking-wide flex items-center gap-1.5">
+                  <ClipboardList className="w-3.5 h-3.5" /> Checklists
+                </h4>
+                {selectedChecklists.map((cl) => {
+                  const items: { completed?: boolean }[] = Array.isArray(cl.items) ? (cl.items as any[]) : [];
+                  const done = items.filter((i) => i.completed).length;
+                  const total = items.length;
+                  const title = cl.notes?.startsWith("title:")
+                    ? cl.notes.replace("title:", "").trim()
+                    : cl.checklist_type;
+                  return (
+                    <button
+                      key={cl.id}
+                      onClick={() => navigate("/admin/checklists")}
+                      className="w-full text-left rounded-xl border border-sundown-border bg-sundown-bg px-3 py-2 hover:border-sundown-green/40 transition-colors"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="w-1 self-stretch rounded-full shrink-0 mt-0.5 bg-sundown-green" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sundown-text font-semibold truncate">
+                            Bldg {cl.building} — {title}
+                          </p>
+                          <p className="text-xs text-sundown-muted flex items-center gap-1">
+                            {cl.completed_at ? (
+                              <><CheckCircle className="w-3 h-3 text-sundown-green" /> Complete</>
+                            ) : (
+                              <>{done}/{total} items done</>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
 

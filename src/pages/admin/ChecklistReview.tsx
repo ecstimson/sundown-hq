@@ -173,6 +173,7 @@ export default function ChecklistReview() {
   // ── Templates state ───────────────────────────────────────────
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<ChecklistTemplate | null>(null);
   const [templateError, setTemplateError] = useState<string | null>(null);
@@ -249,13 +250,22 @@ export default function ChecklistReview() {
     if (activeTab !== "templates") return;
     async function fetchTemplates() {
       setTemplatesLoading(true);
-      const { data } = await supabase
-        .from("checklist_templates")
-        .select("*")
-        .order("building")
-        .order("checklist_type");
-      setTemplates((data as ChecklistTemplate[]) || []);
-      setTemplatesLoading(false);
+      setTemplatesError(null);
+      try {
+        const { data, error } = await supabase
+          .from("checklist_templates")
+          .select("*")
+          .order("building")
+          .order("checklist_type");
+        if (error) throw error;
+        setTemplates((data as ChecklistTemplate[]) || []);
+      } catch (err: any) {
+        console.error("Failed to load templates:", err);
+        setTemplatesError(err?.message || "Failed to load templates.");
+        setTemplates([]);
+      } finally {
+        setTemplatesLoading(false);
+      }
     }
     fetchTemplates();
   }, [activeTab]);
@@ -734,11 +744,17 @@ export default function ChecklistReview() {
             </Button>
           </div>
 
+          {templatesError && (
+            <div className="rounded-md border border-sundown-red/30 bg-sundown-red/10 p-3 text-sm text-sundown-red mb-4">
+              {templatesError}
+            </div>
+          )}
+
           {templatesLoading ? (
             <div className="flex items-center justify-center h-32">
               <Loader2 className="w-8 h-8 animate-spin text-sundown-gold" />
             </div>
-          ) : templates.length === 0 ? (
+          ) : templates.length === 0 && !templatesError ? (
             <EmptyState
               icon={LayoutTemplate}
               title="No Templates"
