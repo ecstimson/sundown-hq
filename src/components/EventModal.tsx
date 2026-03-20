@@ -270,6 +270,10 @@ export default function EventModal({
       setError("Title is required.");
       return;
     }
+    if (!form.calendar_id) {
+      setError("Please select a calendar.");
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -450,13 +454,14 @@ export default function EventModal({
           />
 
           {/* Calendar selector */}
-          {calendars.length > 1 && (
+          {calendars.length > 0 && (
             <div>
               <label className="text-xs text-sundown-muted block mb-1">Calendar</label>
               <select
                 value={form.calendar_id}
                 onChange={(e) => setForm((p) => ({ ...p, calendar_id: e.target.value }))}
                 className="h-10 w-full px-3 rounded-md border border-sundown-border bg-sundown-bg text-sundown-text"
+                disabled={calendars.length === 1}
               >
                 {calendars.map((cal) => (
                   <option key={cal.id} value={cal.id}>

@@ -27,6 +27,7 @@ export default function AdminSchedule() {
   const [error, setError] = useState<string | null>(null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [selectedCalendarId, setSelectedCalendarId] = useState("all");
 
   const selected = new Date(`${date}T00:00:00`);
   const [calYear, setCalYear] = useState(selected.getFullYear());
@@ -82,26 +83,34 @@ export default function AdminSchedule() {
     setCalendars((cals as Calendar[]) || []);
     setEvents((evts as CalendarEvent[]) || []);
     setChecklists((cls as DailyChecklist[]) || []);
+    if (selectedCalendarId !== "all" && cals && !(cals as Calendar[]).some((c) => c.id === selectedCalendarId)) {
+      setSelectedCalendarId("all");
+    }
     setLoading(false);
   }
+
+  const filteredEvents = useMemo(
+    () => selectedCalendarId === "all" ? events : events.filter((e) => e.calendar_id === selectedCalendarId),
+    [events, selectedCalendarId]
+  );
 
   const monthActivity = useMemo(() => {
     const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
     const map: Record<string, number> = {};
     for (let day = 1; day <= daysInMonth; day++) {
       const key = toDateKey(calYear, calMonth, day);
-      const count = events.filter((e) => eventOccursOnDate(e, key)).length;
+      const count = filteredEvents.filter((e) => eventOccursOnDate(e, key)).length;
       if (count > 0) map[key] = count;
     }
     return map;
-  }, [events, calYear, calMonth]);
+  }, [filteredEvents, calYear, calMonth]);
 
   const selectedEvents = useMemo(
     () =>
-      events
+      filteredEvents
         .filter((e) => eventOccursOnDate(e, date))
         .sort((a, b) => a.start_at.localeCompare(b.start_at)),
-    [events, date]
+    [filteredEvents, date]
   );
 
   const checklistActivity = useMemo(() => {
@@ -150,7 +159,7 @@ export default function AdminSchedule() {
   const selectedDateObj = new Date(`${date}T00:00:00`);
   const dayNum = selectedDateObj.getDate();
   const dayName = selectedDateObj.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-  const defaultCalId = calendars[0]?.id || "";
+  const defaultCalId = selectedCalendarId !== "all" ? selectedCalendarId : calendars[0]?.id || "";
 
   return (
     <div className="space-y-4 pb-24">
@@ -162,7 +171,21 @@ export default function AdminSchedule() {
 
       {/* Month header */}
       <div className="flex items-center justify-between px-1">
-        <h2 className="text-2xl font-bold tracking-wide text-sundown-text uppercase">{monthLabel}</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-bold tracking-wide text-sundown-text uppercase">{monthLabel}</h2>
+          {calendars.length > 0 && (
+            <select
+              value={selectedCalendarId}
+              onChange={(e) => setSelectedCalendarId(e.target.value)}
+              className="h-8 px-2 rounded-md border border-sundown-border bg-sundown-bg text-sm text-sundown-text"
+            >
+              <option value="all">All Calendars</option>
+              {calendars.map((cal) => (
+                <option key={cal.id} value={cal.id}>{cal.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" onClick={() => move("prev")}>
             <ChevronLeft className="w-4 h-4" />
@@ -277,11 +300,13 @@ export default function AdminSchedule() {
                   <ClipboardList className="w-3.5 h-3.5" /> Checklists
                 </h4>
                 {selectedChecklists.map((cl) => {
-                  const items: { completed?: boolean }[] = Array.isArray(cl.items) ? (cl.items as any[]) : [];
+                  const rawItems = Array.isArray(cl.items) ? (cl.items as any[]) : [];
+                  const items = rawItems.filter((i): i is { completed?: boolean } => i != null && typeof i === "object");
                   const done = items.filter((i) => i.completed).length;
                   const total = items.length;
-                  const title = cl.notes?.startsWith("title:")
-                    ? cl.notes.replace("title:", "").trim()
+                  const notes = typeof cl.notes === "string" ? cl.notes : "";
+                  const title = notes.startsWith("title:")
+                    ? notes.replace("title:", "").trim()
                     : cl.checklist_type;
                   return (
                     <button

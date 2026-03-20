@@ -169,6 +169,9 @@ export default function ChecklistReview() {
   const [addingItemTo, setAddingItemTo] = useState<string | null>(null);
   const [newItemLabel, setNewItemLabel] = useState("");
   const newItemRef = useRef<HTMLInputElement>(null);
+  const [deletingChecklist, setDeletingChecklist] = useState<string | null>(null);
+  const [editingChecklistTitle, setEditingChecklistTitle] = useState<string | null>(null);
+  const [editTitleDraft, setEditTitleDraft] = useState("");
 
   // ── Templates state ───────────────────────────────────────────
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
@@ -232,6 +235,11 @@ export default function ChecklistReview() {
             setStatusMap((prev) => ({ ...prev, [day]: true }));
           } else if (payload.eventType === "UPDATE") {
             setChecklists((prev) => prev.map((c) => (c.id === row.id ? row : c)));
+          } else if (payload.eventType === "DELETE") {
+            const old = payload.old as { id?: string };
+            if (old?.id) {
+              setChecklists((prev) => prev.filter((c) => c.id !== old.id));
+            }
           }
         }
       )
@@ -366,6 +374,27 @@ export default function ChecklistReview() {
     updateChecklistItems(checklistId, [...items, next]);
     setAddingItemTo(null);
     setNewItemLabel("");
+  }
+
+  // ── Checklist instance actions ────────────────────────────────
+
+  async function deleteChecklist(id: string) {
+    const { error } = await supabase.from("daily_checklists").delete().eq("id", id);
+    if (!error) {
+      setChecklists((prev) => prev.filter((c) => c.id !== id));
+    }
+    setDeletingChecklist(null);
+  }
+
+  async function saveChecklistTitle(checklistId: string, newTitle: string) {
+    const notes = `title: ${newTitle.trim()}`;
+    const { error } = await (supabase.from("daily_checklists") as any)
+      .update({ notes })
+      .eq("id", checklistId);
+    if (!error) {
+      setChecklists((prev) => prev.map((c) => (c.id === checklistId ? { ...c, notes } : c)));
+    }
+    setEditingChecklistTitle(null);
   }
 
   // ── Template CRUD ─────────────────────────────────────────────
@@ -596,19 +625,51 @@ export default function ChecklistReview() {
                   return (
                     <Card key={cl.id}>
                       <CardHeader className="pb-3 border-b border-sundown-border">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-base">
-                            Building {cl.building} - {customTitle || cl.checklist_type}
-                          </CardTitle>
-                          {cl.completed_at ? (
-                            <span className="px-2 py-1 rounded-full bg-sundown-green/10 text-sundown-green text-xs font-bold uppercase">
-                              Complete
-                            </span>
-                          ) : (
-                            <span className="px-2 py-1 rounded-full bg-sundown-muted/10 text-sundown-muted text-xs font-bold uppercase">
-                              In Progress
-                            </span>
-                          )}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            {editingChecklistTitle === cl.id ? (
+                              <input
+                                autoFocus
+                                value={editTitleDraft}
+                                onChange={(e) => setEditTitleDraft(e.target.value)}
+                                onBlur={() => { if (editTitleDraft.trim()) saveChecklistTitle(cl.id, editTitleDraft); else setEditingChecklistTitle(null); }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && editTitleDraft.trim()) saveChecklistTitle(cl.id, editTitleDraft);
+                                  if (e.key === "Escape") setEditingChecklistTitle(null);
+                                }}
+                                className="text-base font-semibold w-full bg-sundown-bg border border-sundown-border rounded px-2 py-1 text-sundown-text focus:outline-none focus:ring-1 focus:ring-sundown-gold"
+                              />
+                            ) : (
+                              <CardTitle className="text-base truncate">
+                                Building {cl.building} - {customTitle || cl.checklist_type}
+                              </CardTitle>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {cl.completed_at ? (
+                              <span className="px-2 py-1 rounded-full bg-sundown-green/10 text-sundown-green text-xs font-bold uppercase">
+                                Complete
+                              </span>
+                            ) : (
+                              <span className="px-2 py-1 rounded-full bg-sundown-muted/10 text-sundown-muted text-xs font-bold uppercase">
+                                In Progress
+                              </span>
+                            )}
+                            <button
+                              onClick={() => { setEditingChecklistTitle(cl.id); setEditTitleDraft(customTitle || cl.checklist_type); }}
+                              className="p-1 text-sundown-muted hover:text-sundown-gold transition-colors"
+                              title="Edit title"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setDeletingChecklist(cl.id)}
+                              className="p-1 text-sundown-muted hover:text-sundown-red transition-colors"
+                              title="Delete checklist"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </CardHeader>
                       <CardContent className="p-0">
@@ -671,6 +732,27 @@ export default function ChecklistReview() {
               </div>
             )}
           </div>
+
+          {/* Delete Checklist Confirmation */}
+          {deletingChecklist && (
+            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+              <div className="w-full max-w-sm rounded-xl border border-sundown-border bg-sundown-card p-6 text-center space-y-4">
+                <h3 className="text-lg font-bold text-sundown-text">Delete Checklist?</h3>
+                <p className="text-sm text-sundown-muted">
+                  This will permanently remove this checklist and all its items.
+                </p>
+                <div className="flex justify-center gap-2">
+                  <Button variant="outline" onClick={() => setDeletingChecklist(null)}>Cancel</Button>
+                  <Button
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => deleteChecklist(deletingChecklist)}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Create Checklist Modal */}
           {showCreateModal && (

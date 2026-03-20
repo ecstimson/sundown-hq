@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { ChevronLeft, ChevronRight, Loader2, Plus, CheckCircle, Circle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Plus, CheckCircle, Circle, ClipboardList } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import EventModal from "@/components/EventModal";
@@ -13,7 +13,7 @@ import {
   formatEventTime,
   formatRepeatRule,
 } from "@/lib/calendarHelpers";
-import type { Calendar, CalendarEvent } from "@/types/database";
+import type { Calendar, CalendarEvent, DailyChecklist } from "@/types/database";
 
 export default function EmployeeSchedule() {
   const { employee } = useAuth();
@@ -21,6 +21,7 @@ export default function EmployeeSchedule() {
   const [date, setDate] = useState(todayKey);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [checklists, setChecklists] = useState<DailyChecklist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showEventModal, setShowEventModal] = useState(false);
@@ -56,25 +57,35 @@ export default function EmployeeSchedule() {
   async function fetchData() {
     setLoading(true);
     setError(null);
-    const [{ data: cals, error: calErr }, { data: evts, error: evtErr }] = await Promise.all([
+    const [{ data: cals, error: calErr }, { data: evts, error: evtErr }, { data: cls }] = await Promise.all([
       supabase.from("calendars").select("*").order("name"),
       supabase
         .from("calendar_events")
         .select("*")
         .or(
-          // Non-recurring or multi-day: overlap the visible month window
           `and(start_at.lte.${monthEnd}T23:59:59,end_at.gte.${monthStart}T00:00:00),` +
-          // Recurring templates: started on or before month end and not yet expired
           `and(repeat_rule.neq.none,start_at.lte.${monthEnd}T23:59:59,or(repeat_until.is.null,repeat_until.gte.${monthStart}))`
         )
         .order("start_at"),
+      supabase
+        .from("daily_checklists")
+        .select("id, date, checklist_type, building, completed_at, items, notes")
+        .gte("date", monthStart)
+        .lte("date", monthEnd)
+        .order("created_at"),
     ]);
 
     if (calErr || evtErr) {
       setError(calErr?.message || evtErr?.message || "Failed to load calendar data.");
     }
-    setCalendars((cals as Calendar[]) || []);
-    setEvents((evts as CalendarEvent[]) || []);
+    const allCals = (cals as Calendar[]) || [];
+    setCalendars(allCals);
+
+    const opsCal = allCals.find((c) => c.name.toLowerCase().includes("operations"));
+    const opsCalId = opsCal?.id;
+    const allEvts = (evts as CalendarEvent[]) || [];
+    setEvents(opsCalId ? allEvts.filter((e) => e.calendar_id === opsCalId) : allEvts);
+    setChecklists((cls as DailyChecklist[]) || []);
     setLoading(false);
   }
 
@@ -95,6 +106,19 @@ export default function EmployeeSchedule() {
         .filter((e) => eventOccursOnDate(e, date))
         .sort((a, b) => a.start_at.localeCompare(b.start_at)),
     [events, date]
+  );
+
+  const checklistActivity = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const cl of checklists) {
+      map[cl.date] = (map[cl.date] || 0) + 1;
+    }
+    return map;
+  }, [checklists]);
+
+  const selectedChecklists = useMemo(
+    () => checklists.filter((cl) => cl.date === date),
+    [checklists, date]
   );
 
   const calendarColorMap = useMemo(() => {
@@ -130,7 +154,11 @@ export default function EmployeeSchedule() {
   const selectedDateObj = new Date(`${date}T00:00:00`);
   const dayNum = selectedDateObj.getDate();
   const dayName = selectedDateObj.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-  const defaultCalId = calendars[0]?.id || "";
+  const opsCalendars = useMemo(
+    () => calendars.filter((c) => c.name.toLowerCase().includes("operations")),
+    [calendars]
+  );
+  const defaultCalId = opsCalendars[0]?.id || calendars[0]?.id || "";
 
   return (
     <div className="space-y-4 pb-36">
@@ -169,7 +197,8 @@ export default function EmployeeSchedule() {
               const dayKey = toDateKey(calYear, calMonth, day);
               const isSelected = dayKey === date;
               const isToday = dayKey === todayKey;
-              const count = monthActivity[dayKey] || 0;
+              const evtCount = monthActivity[dayKey] || 0;
+              const clCount = checklistActivity[dayKey] || 0;
               return (
                 <button
                   key={dayKey}
@@ -187,11 +216,14 @@ export default function EmployeeSchedule() {
                   >
                     {day}
                   </span>
-                  {count > 0 && (
+                  {(evtCount > 0 || clCount > 0) && (
                     <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-0.5">
-                      {Array.from({ length: Math.min(count, 3) }).map((_, j) => (
-                        <span key={j} className="w-1 h-1 rounded-full bg-sundown-gold" />
+                      {Array.from({ length: Math.min(evtCount, 3) }).map((_, j) => (
+                        <span key={`e${j}`} className="w-1 h-1 rounded-full bg-sundown-gold" />
                       ))}
+                      {clCount > 0 && (
+                        <span className="w-1 h-1 rounded-full bg-sundown-green" />
+                      )}
                     </span>
                   )}
                 </button>
@@ -212,98 +244,142 @@ export default function EmployeeSchedule() {
           <div className="flex items-center justify-center h-20">
             <Loader2 className="w-5 h-5 animate-spin text-sundown-gold" />
           </div>
-        ) : selectedEvents.length === 0 ? (
+        ) : selectedEvents.length === 0 && selectedChecklists.length === 0 ? (
           <p className="text-sm text-sundown-muted">No events for this day. Tap + to create one.</p>
         ) : (
-          <div className="space-y-2">
-            {selectedEvents.map((event) => {
-              const color = calendarColorMap[event.calendar_id] || "#D4A843";
-              const checklistItems = Array.isArray(event.checklist_items)
-                ? (event.checklist_items as unknown as ChecklistItemData[])
-                : [];
-              const hasChecklist = checklistItems.length > 0;
-              const completedCount = checklistItems.filter((i) => i.completed).length;
+          <>
+            {selectedEvents.length > 0 && (
+              <div className="space-y-2">
+                {selectedEvents.map((event) => {
+                  const color = calendarColorMap[event.calendar_id] || "#D4A843";
+                  const checklistItems = Array.isArray(event.checklist_items)
+                    ? (event.checklist_items as unknown as ChecklistItemData[])
+                    : [];
+                  const hasChecklist = checklistItems.length > 0;
+                  const completedCount = checklistItems.filter((i) => i.completed).length;
 
-              return (
-                <div
-                  key={event.id}
-                  className="rounded-xl border border-sundown-border bg-sundown-bg overflow-hidden"
-                >
-                  <button
-                    onClick={() => openEditEvent(event)}
-                    className="w-full text-left px-3 py-2 hover:bg-sundown-card/50 transition-colors"
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="w-1 self-stretch rounded-full shrink-0 mt-0.5" style={{ backgroundColor: color }} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sundown-text font-semibold truncate">{event.title}</p>
-                        <p className="text-xs text-sundown-muted">
-                          {formatEventTime(event)}
-                          {event.location ? ` · ${event.location}` : ""}
-                          {hasChecklist ? ` · ${completedCount}/${checklistItems.length} done` : ""}
-                        </p>
+                  return (
+                    <div
+                      key={event.id}
+                      className="rounded-xl border border-sundown-border bg-sundown-bg overflow-hidden"
+                    >
+                      <button
+                        onClick={() => openEditEvent(event)}
+                        className="w-full text-left px-3 py-2 hover:bg-sundown-card/50 transition-colors"
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className="w-1 self-stretch rounded-full shrink-0 mt-0.5" style={{ backgroundColor: color }} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sundown-text font-semibold truncate">{event.title}</p>
+                            <p className="text-xs text-sundown-muted">
+                              {formatEventTime(event)}
+                              {event.location ? ` · ${event.location}` : ""}
+                              {hasChecklist ? ` · ${completedCount}/${checklistItems.length} done` : ""}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+
+                      {hasChecklist && (
+                        <div className="border-t border-sundown-border px-3 py-2 space-y-1">
+                          {checklistItems.map((item) => (
+                            <button
+                              key={item.id}
+                              onClick={async () => {
+                                const updated = checklistItems.map((ci) =>
+                                  ci.id === item.id
+                                    ? {
+                                        ...ci,
+                                        completed: !ci.completed,
+                                        completed_by: !ci.completed ? employee?.name || "" : "",
+                                        completed_at: !ci.completed ? new Date().toISOString() : "",
+                                      }
+                                    : ci
+                                );
+                                await (supabase.from("calendar_events") as any)
+                                  .update({ checklist_items: updated })
+                                  .eq("id", event.id);
+                                setEvents((prev) =>
+                                  prev.map((e) =>
+                                    e.id === event.id
+                                      ? { ...e, checklist_items: updated as any }
+                                      : e
+                                  )
+                                );
+                              }}
+                              className="w-full text-left flex items-center gap-2 py-1 group"
+                            >
+                              <div className={item.completed ? "text-sundown-green" : "text-sundown-muted"}>
+                                {item.completed ? (
+                                  <CheckCircle className="w-4 h-4" />
+                                ) : (
+                                  <Circle className="w-4 h-4" />
+                                )}
+                              </div>
+                              <span
+                                className={`text-sm flex-1 ${
+                                  item.completed
+                                    ? "line-through text-sundown-muted"
+                                    : "text-sundown-text"
+                                }`}
+                              >
+                                {item.label}
+                              </span>
+                              {item.completed && item.completed_by && (
+                                <span className="text-[10px] text-sundown-green">
+                                  {item.completed_by}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {selectedChecklists.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-sundown-muted uppercase tracking-wide flex items-center gap-1.5">
+                  <ClipboardList className="w-3.5 h-3.5" /> Checklists
+                </h4>
+                {selectedChecklists.map((cl) => {
+                  const rawItems = Array.isArray(cl.items) ? (cl.items as any[]) : [];
+                  const items = rawItems.filter((i): i is { completed?: boolean } => i != null && typeof i === "object");
+                  const done = items.filter((i) => i.completed).length;
+                  const total = items.length;
+                  const notes = typeof cl.notes === "string" ? cl.notes : "";
+                  const title = notes.startsWith("title:")
+                    ? notes.replace("title:", "").trim()
+                    : cl.checklist_type;
+                  return (
+                    <div
+                      key={cl.id}
+                      className="w-full text-left rounded-xl border border-sundown-border bg-sundown-bg px-3 py-2"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="w-1 self-stretch rounded-full shrink-0 mt-0.5 bg-sundown-green" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sundown-text font-semibold truncate">
+                            Bldg {cl.building} — {title}
+                          </p>
+                          <p className="text-xs text-sundown-muted flex items-center gap-1">
+                            {cl.completed_at ? (
+                              <><CheckCircle className="w-3 h-3 text-sundown-green" /> Complete</>
+                            ) : (
+                              <>{done}/{total} items done</>
+                            )}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </button>
-
-                  {hasChecklist && (
-                    <div className="border-t border-sundown-border px-3 py-2 space-y-1">
-                      {checklistItems.map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={async () => {
-                            const updated = checklistItems.map((ci) =>
-                              ci.id === item.id
-                                ? {
-                                    ...ci,
-                                    completed: !ci.completed,
-                                    completed_by: !ci.completed ? employee?.name || "" : "",
-                                    completed_at: !ci.completed ? new Date().toISOString() : "",
-                                  }
-                                : ci
-                            );
-                            await (supabase.from("calendar_events") as any)
-                              .update({ checklist_items: updated })
-                              .eq("id", event.id);
-                            setEvents((prev) =>
-                              prev.map((e) =>
-                                e.id === event.id
-                                  ? { ...e, checklist_items: updated as any }
-                                  : e
-                              )
-                            );
-                          }}
-                          className="w-full text-left flex items-center gap-2 py-1 group"
-                        >
-                          <div className={item.completed ? "text-sundown-green" : "text-sundown-muted"}>
-                            {item.completed ? (
-                              <CheckCircle className="w-4 h-4" />
-                            ) : (
-                              <Circle className="w-4 h-4" />
-                            )}
-                          </div>
-                          <span
-                            className={`text-sm flex-1 ${
-                              item.completed
-                                ? "line-through text-sundown-muted"
-                                : "text-sundown-text"
-                            }`}
-                          >
-                            {item.label}
-                          </span>
-                          {item.completed && item.completed_by && (
-                            <span className="text-[10px] text-sundown-green">
-                              {item.completed_by}
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -319,12 +395,12 @@ export default function EmployeeSchedule() {
         <Plus className="w-8 h-8" strokeWidth={2.6} />
       </button>
 
-      {/* Event modal */}
+      {/* Event modal — only pass Operations calendar to employee */}
       <EventModal
         open={showEventModal}
         onClose={() => { setShowEventModal(false); setEditingEvent(null); }}
         onSaved={fetchData}
-        calendars={calendars}
+        calendars={opsCalendars}
         defaultDate={date}
         defaultCalendarId={defaultCalId}
         editEvent={editingEvent}
