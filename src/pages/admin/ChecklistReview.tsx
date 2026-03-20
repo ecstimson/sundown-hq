@@ -181,7 +181,7 @@ export default function ChecklistReview() {
     checklist_type: "Opening",
     building: "A" as "A" | "B",
     itemsText: "",
-    repeat_rule: "daily" as "daily" | "custom_weekdays",
+    repeat_rule: "custom_weekdays" as "daily" | "custom_weekdays",
     repeat_weekdays: [] as number[],
     is_active: true,
   });
@@ -364,7 +364,7 @@ export default function ChecklistReview() {
     setEditingTemplate(null);
     setTemplateForm({
       title: "Opening Checklist", checklist_type: "Opening", building: "A",
-      itemsText: "", repeat_rule: "daily", repeat_weekdays: [], is_active: true,
+      itemsText: "", repeat_rule: "custom_weekdays", repeat_weekdays: [], is_active: true,
     });
     setTemplateError(null);
     setShowTemplateModal(true);

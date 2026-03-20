@@ -22,6 +22,7 @@ import DropPlanner from "@/pages/admin/DropPlanner";
 import SOPManager from "@/pages/admin/SOPManager";
 import Integrations from "@/pages/admin/Integrations";
 import AdminSchedule from "@/pages/admin/Schedule";
+import ChecklistReview from "@/pages/admin/ChecklistReview";
 import EmployeeSchedule from "@/pages/EmployeeSchedule";
 import GroupChat from "@/pages/GroupChat";
 import SystemSettings from "@/pages/admin/SystemSettings";
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="animals/:id" element={<AnimalDetail />} />
           <Route path="drops" element={<DropPlanner />} />
           <Route path="schedule" element={<AdminSchedule />} />
+          <Route path="checklists" element={<ChecklistReview />} />
           <Route path="messages" element={<GroupChat />} />
           <Route path="sops" element={<SOPManager />} />
           <Route path="inventory" element={<Inventory />} />

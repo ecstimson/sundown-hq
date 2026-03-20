@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, List, Calendar, Book, Users, Plug, Settings,
-  LogOut, MessageSquare, CalendarDays, Plus, Menu, X,
+  LogOut, MessageSquare, CalendarDays, Plus, Menu, X, ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
@@ -13,6 +13,7 @@ const navItems = [
   { to: "/admin/quick-add", icon: Plus, label: "Quick Add" },
   { to: "/admin/animals", icon: List, label: "Animals" },
   { to: "/admin/schedule", icon: CalendarDays, label: "Schedule" },
+  { to: "/admin/checklists", icon: ClipboardList, label: "Checklists" },
   { to: "/admin/drops", icon: Calendar, label: "Drop Planner" },
   { to: "/admin/sops", icon: Book, label: "SOPs" },
   { to: "/admin/staff", icon: Users, label: "Employees" },
